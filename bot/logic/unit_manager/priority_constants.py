@@ -103,23 +103,23 @@ def derive_new_weights(situations : dict, solutions : dict, multiplier) -> List[
     situations = [[multiplier[idx](val) for idx, val in enumerate(situation)] for situation in situations.values()]
     solutions = [solution for solution in solutions.values()]
 
-    print('Situations : ', str(situations))
-    print('Solutions : ', str(solutions))
+    # print('Situations : ', str(situations))
+    # print('Solutions : ', str(solutions))
 
     priorities = least_squares_approximation(situations, solutions)
 
-    print('Priorities : ', str(priorities))
+    # print('Priorities : ', str(priorities))
 
     return priorities
 
 if __name__ == '__main__':
-    print('Enemy group weights: ')
+    # print('Enemy group weights: ')
     situations = priority_info[PriorityType.ENEMY_GROUP][PriorityInfo.SITUATIONS]
     solutions = priority_info[PriorityType.ENEMY_GROUP][PriorityInfo.SOLUTIONS]
     multiplier = priority_info[PriorityType.ENEMY_GROUP][PriorityInfo.MULTIPLIER]
     derive_new_weights(situations, solutions, multiplier)
 
-    print('Unit to group weights: ')
+    # print('Unit to group weights: ')
     situations = priority_info[PriorityType.UNIT_TO_GROUP][PriorityInfo.SITUATIONS]
     solutions = priority_info[PriorityType.UNIT_TO_GROUP][PriorityInfo.SOLUTIONS]
     multiplier = priority_info[PriorityType.UNIT_TO_GROUP][PriorityInfo.MULTIPLIER]

@@ -107,14 +107,14 @@ class UnitManager_v2_lstsqr:
         for group in groups:
             p = self.prioritize_group2(group)
             res.enqueue(group, p)
-            self.debug_service.text_world(f'{group.value}, {round(p,2)}', Point3((group.location.x, group.location.y, 10)), Point3((255, 0, 0)), 12)
+            # self.debug_service.text_world(f'{group.value}, {round(p,2)}', Point3((group.location.x, group.location.y, 10)), Point3((255, 0, 0)), 12)
         unassigned = unassigned.tags_not_in(can_attack.tags)
 
         groups = self.group_service.create_groups(unassigned)
         for group in groups:
             p = self.prioritize_group2(group)
             res.enqueue(group, p)
-            self.debug_service.text_world(f'{group.value}, {round(p,2)}', Point3((group.location.x, group.location.y, 10)), Point3((255, 0 ,0)), 12)
+            # self.debug_service.text_world(f'{group.value}, {round(p,2)}', Point3((group.location.x, group.location.y, 10)), Point3((255, 0 ,0)), 12)
 
         return res
 
@@ -259,7 +259,7 @@ class UnitManager_v2_lstsqr:
             enemy_group = sorted_enemy_groups.peek()
             d[enemy_group].units.append(unit)
             # TODO consider cloak values
-            self.debug_service.text_world(f'{round(sorted_enemy_groups.peek2()[1],2)}', Point3((unit.position3d.x, unit.position3d.y - 0.35, unit.position3d.z)), Point3((0, 255, 0)), 12)
+            # self.debug_service.text_world(f'{round(sorted_enemy_groups.peek2()[1],2)}', Point3((unit.position3d.x, unit.position3d.y - 0.35, unit.position3d.z)), Point3((0, 255, 0)), 12)
             d[enemy_group].value += self.unit_type.get_unit_combat_value_enemy_group(unit.type_id, enemy_group.units) * sum(self.unit_type.get_resource_value(unit.type_id))
         for key, value in d.items():
             a = AssignedGroup()

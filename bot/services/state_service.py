@@ -126,13 +126,13 @@ class StateService():
         # TODO: remember enemy units for certain amount of time and structures permanently
         self.unit_memory.iterate(self.getTimeInSeconds())
         self.enemy_units = self.unit_memory.observed_enemy_units
-        self.debug.text_screen_auto(f'Currently observed enemy units: {self.enemy_units.amount}', 10, 0)
+        # self.debug.text_screen_auto(f'Currently observed enemy units: {self.enemy_units.amount}', 10, 0)
         cannons = self.enemy_units(UnitTypeId.PHOTONCANNON)
         ctags = set()
         for c in cannons:
             ctags.add(c.tag)
-        self.debug.text_screen_auto(f'Cannon tags amount: {len(ctags)}', 11, 0)
-        self.debug.text_screen_auto(f'Current build idx: {self.build_manager.build_idx}', 12, 0)
+        # self.debug.text_screen_auto(f'Cannon tags amount: {len(ctags)}', 11, 0)
+        # self.debug.text_screen_auto(f'Current build idx: {self.build_manager.build_idx}', 12, 0)
         #self.debug.text_screen_auto(f'bool: {self.hit_worker_threshold}, Current time since last hit worker limit: {self.get_time_since_hit_last_worker_threshold()}', 13, 0)
         self.enemy_units_that_can_attack = self.enemy_units.filter(lambda u: u.can_attack)
         self.enemy_structures: Units = self.unit_memory.observed_enemy_units.structure
@@ -216,8 +216,8 @@ class StateService():
         else:
             self.scouting_information.add(ScoutingInformation.ENEMY_ONE_BASE)
 
-        for idx, info in enumerate(self.scouting_information):
-            self.debug.text_screen_auto(f'{info.name}', 10 + idx, 2)
+        # for idx, info in enumerate(self.scouting_information):
+        #     self.debug.text_screen_auto(f'{info.name}', 10 + idx, 2)
         
         enemy_moved_out = self.has_enemy_moved_out(0.5)
         if enemy_moved_out:
@@ -283,13 +283,13 @@ class StateService():
 
         total_idx = 0
         for idx, u in enumerate(self.army_composition.goal_army_composition):
-            self.debug.text_screen_auto(f'{u.name}', total_idx, 2, (0, 255, 0))
+            # self.debug.text_screen_auto(f'{u.name}', total_idx, 2, (0, 255, 0))
             total_idx += 1
         for idx, u in enumerate(self.army_composition.fallback_units):
-            self.debug.text_screen_auto(f'{u.name}', total_idx, 2, (128, 184, 128))
+            # self.debug.text_screen_auto(f'{u.name}', total_idx, 2, (128, 184, 128))
             total_idx += 1
         for idx, u in enumerate(self.army_composition.desperation_units):
-            self.debug.text_screen_auto(f'{u.name}', total_idx, 2, (128, 128, 128))
+            # self.debug.text_screen_auto(f'{u.name}', total_idx, 2, (128, 128, 128))
             total_idx += 1
     
     def already_pending(self, unit_type: Union[UpgradeId, UnitTypeId], all_units: bool = True) -> int:
@@ -341,7 +341,7 @@ class StateService():
             if type_id in {UnitTypeId.DRONE, UnitTypeId.PROBE, UnitTypeId.SCV}:
                 #calculate by hand because .amount doesn't account for workers in gas structures
                 worker_amount = sum(townhall.assigned_harvesters for townhall in self.own_townhalls) +\
-                     sum(ex.assigned_harvesters for ex in self.own_structures(UnitTypeId.EXTRACTOR)) +\
+                     sum(ex.assigned_harvesters for ex in self.own_structures.of_type({UnitTypeId.EXTRACTOR,UnitTypeId.EXTRACTORRICH})) +\
                      self.own_units(type_id).filter(lambda u: u.is_idle or u.is_attacking or u.is_moving).amount +\
                     self.already_pending(type_id)
                 return worker_amount

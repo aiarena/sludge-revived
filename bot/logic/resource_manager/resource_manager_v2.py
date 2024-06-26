@@ -124,7 +124,8 @@ class ResourceManagerv2(ResourceManagerInterface):
                         for _ in range(amt):
                             minerals_left, vespene_left, supply_left, larva_left, _ = self._appendUnit(unit_id, minerals_left, vespene_left, supply_left, larva_left, spending_list)
             except BaseException as e:
-                print(f'optimal combination error: {e}')
+                pass
+                # print(f'optimal combination error: {e}')
         return minerals_left, vespene_left, supply_left, larva_left
 
     def can_afford_all_units(self, army_unit_ids, minerals_left, vespene_left, supply_left, larva_left) -> bool:

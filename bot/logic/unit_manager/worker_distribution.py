@@ -25,7 +25,7 @@ class WorkerDistributor:
         m, v = self.eco_balance.worker_assignment(workers.amount)
 
         # saturate extractors
-        for extractor in self.state.own_structures(UnitTypeId.EXTRACTOR).ready.sorted_by_distance_to(self.state.game_info.start_location):
+        for extractor in self.state.own_structures.of_type({UnitTypeId.EXTRACTOR,UnitTypeId.EXTRACTORRICH}).ready.sorted_by_distance_to(self.state.game_info.start_location):
             extractor: Unit = extractor
             assigned = 0
             def assign_worker(worker):
@@ -58,7 +58,7 @@ class WorkerDistributor:
         for townhall in self.state.own_townhalls:
             harvesters_on_townhall[townhall] = 0
 
-        vespene_gatherers = sum(gas.assigned_harvesters for gas in self.state.own_structures(UnitTypeId.EXTRACTOR))
+        vespene_gatherers = sum(gas.assigned_harvesters for gas in self.state.own_structures.of_type({UnitTypeId.EXTRACTOR,UnitTypeId.EXTRACTORRICH}))
 
         # keep drones mining if not oversaturated
         def assign_worker(worker, townhall):
@@ -87,7 +87,7 @@ class WorkerDistributor:
                     continue
 
                 ideal_harvesters = townhall.ideal_harvesters
-                ex = self.state.own_structures(UnitTypeId.EXTRACTOR).closer_than(10, townhall.position).ready
+                ex = self.state.own_structures.of_type({UnitTypeId.EXTRACTOR,UnitTypeId.EXTRACTORRICH}).closer_than(10, townhall.position).ready
                 #TODO below is untested but should be more efficient than above, according to "Typical Bottlenecks" on documentation
                 #ex = self.state.own_structures.filter(lambda u: u.type_id == UnitTypeId.EXTRACTOR and (u.distance_to(10, townhall.position)) and u.ready)
                 for e in ex:
@@ -104,7 +104,7 @@ class WorkerDistributor:
             mid_field = mins.closest_to(mins.center)
             assigned_count = harvesters_on_townhall[townhall]
             ideal_harvesters = townhall.ideal_harvesters
-            ex = self.state.own_structures(UnitTypeId.EXTRACTOR).closer_than(10, townhall.position).ready
+            ex = self.state.own_structures.of_type({UnitTypeId.EXTRACTOR,UnitTypeId.EXTRACTORRICH}).closer_than(10, townhall.position).ready
             for e in ex:
                 ideal_harvesters += 3
                 ideal_harvesters -= e.assigned_harvesters
@@ -137,7 +137,7 @@ class WorkerDistributor:
 
     def worker_mining_any_vespene(self, worker : Unit) -> bool:
         '''Returns whether or not a worker is mining from any vespene geyser.'''
-        return (worker.is_carrying_vespene and worker.is_returning) or worker.order_target in self.state.own_structures(UnitTypeId.EXTRACTOR).tags
+        return (worker.is_carrying_vespene and worker.is_returning) or worker.order_target in self.state.own_structures.of_type({UnitTypeId.EXTRACTOR,UnitTypeId.EXTRACTORRICH}).tags
 
     def worker_mining_vespene(self, worker : Unit, gas_structure : Unit) -> bool:
         '''Returns whether or not a worker is mining vespene from the given gas structure.'''

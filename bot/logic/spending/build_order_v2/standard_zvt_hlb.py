@@ -22,15 +22,15 @@ def get_build(state : StateService):
             ),
             BOStep(
                 18,
-                lambda: state.get_unit_count(UnitTypeId.EXTRACTOR) > 1,
-                lambda: state.get_unit_count(UnitTypeId.EXTRACTOR) < 1,
+                lambda: state.get_unit_count(UnitTypeId.EXTRACTOR)+state.get_unit_count(UnitTypeId.EXTRACTORRICH) > 1,
+                lambda: state.get_unit_count(UnitTypeId.EXTRACTOR)+state.get_unit_count(UnitTypeId.EXTRACTORRICH) < 1,
                 UnitTypeId.EXTRACTOR
             ),
             BOStep(
                 17,
                 lambda: state.get_unit_count(UnitTypeId.SPAWNINGPOOL) > 1,
                 lambda: (state.get_unit_count(UnitTypeId.SPAWNINGPOOL) < 1
-                        and state.get_unit_count(UnitTypeId.EXTRACTOR) >= 1),
+                        and state.get_unit_count(UnitTypeId.EXTRACTOR)+state.get_unit_count(UnitTypeId.EXTRACTORRICH) >= 1),
                 UnitTypeId.SPAWNINGPOOL
             ),
             BOStep(
@@ -44,7 +44,7 @@ def get_build(state : StateService):
                 lambda: (state.already_pending_upgrade(UpgradeId.ZERGLINGMOVEMENTSPEED) > 0
                         or UpgradeId.ZERGLINGMOVEMENTSPEED in state.upgrades),
                 lambda: (state.own_units(UnitTypeId.SPAWNINGPOOL).ready.exists
-                        and state.get_unit_count(UnitTypeId.EXTRACTOR) > 0),
+                        and state.get_unit_count(UnitTypeId.EXTRACTOR)+state.get_unit_count(UnitTypeId.EXTRACTORRICH) > 0),
                 UpgradeId.ZERGLINGMOVEMENTSPEED
             ),
             BOStep(

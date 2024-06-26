@@ -112,7 +112,7 @@ class ArmyStrategyManagerv2(ArmyStrategyManagerInterface):
                 self.action_service.add(unit.tag, unit.move(threat.location), 10)
                 self.unassigned_units.remove(unit)
                 pos = unit.position
-                self.debug.text_world(f'Extra', Point3((pos.x, pos.y, 10)), None, 12)
+                # self.debug.text_world(f'Extra', Point3((pos.x, pos.y, 10)), None, 12)
 
 
         #----------------------------------#

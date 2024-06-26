@@ -87,7 +87,7 @@ class ArmyTacticsv2(ArmyTacticsManagerInterface):
                     closest_enemy = threat.units.closest_to(sub_group.center)
                     #distance = sub_group.center.distance_to(closest_enemy.position)
                     distance = distance_from_boundary(threat.hull, sub_group.center)
-                    self.debug.text_world(f'd = {round(distance, 3)}, val = {nearby_army_value - threat.value}', Point3((sub_group.center.x, sub_group.center.y, 10)), None, 12)
+                    # self.debug.text_world(f'd = {round(distance, 3)}, val = {nearby_army_value - threat.value}', Point3((sub_group.center.x, sub_group.center.y, 10)), None, 12)
                     if distance < 6:
                         direction = unit_direction(threat.location, sub_group.center)
 

@@ -78,8 +78,8 @@ class DefaultLogic(LogicInterface):
                 color = (0, 255, 0)
             else:
                 color = (128, 128, 128)
-            self.debug.text_screen_auto(f'{e[0].name}', idx, 0, color)
-            self.debug.text_screen_auto(f'{e[1]}', idx, 1, color)
+            # self.debug.text_screen_auto(f'{e[0].name}', idx, 0, color)
+            # self.debug.text_screen_auto(f'{e[1]}', idx, 1, color)
             
         m = 0
         v = 0

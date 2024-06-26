@@ -83,7 +83,7 @@ class Spendingv2(SpendingInterface):
         priorities.extend(self.bo_runner.on_step())
 
         ex = self.eco_balance.req_extractors
-        if ex > self.state.get_unit_count(UnitTypeId.EXTRACTOR):
+        if ex > self.state.get_unit_count(UnitTypeId.EXTRACTOR)+self.state.get_unit_count(UnitTypeId.EXTRACTORRICH):
             priorities.enqueue(UnitTypeId.EXTRACTOR, 1001)
 
         # Scouting responses

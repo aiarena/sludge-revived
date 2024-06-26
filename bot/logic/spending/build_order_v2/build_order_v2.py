@@ -92,7 +92,7 @@ class BORunner:
             priorities.enqueue(UnitTypeAbstraction.ARMY, 10)
         if self.actions[BOAction.BUILD_HATCHERIES]:
             if self.need_hatchery():
-                print(f'NEED HATCHERY!! bo action is: {self.actions[BOAction.BUILD_HATCHERIES]}')
+                # print(f'NEED HATCHERY!! bo action is: {self.actions[BOAction.BUILD_HATCHERIES]}')
                 priorities.enqueue(UnitTypeId.HATCHERY, 20)
             elif self.state.already_pending(UnitTypeId.HATCHERY) < 2:
                 priorities.enqueue(UnitTypeId.HATCHERY, 5)

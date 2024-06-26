@@ -53,7 +53,7 @@ class BORepository():
             ),
             (BOStep(
                 lambda: self.bot.supply_used >= 18,
-                lambda: self.bot.already_pending(UnitTypeId.EXTRACTOR) or self.bot.units(UnitTypeId.EXTRACTOR).exists,
+                lambda: self.bot.already_pending(UnitTypeId.EXTRACTOR) or self.bot.units(UnitTypeId.EXTRACTOR).exists or self.bot.units(UnitTypeId.EXTRACTORRICH).exists,
                 UnitTypeId.EXTRACTOR
             )),
             (BOStep(
@@ -107,7 +107,7 @@ class BORepository():
             ),
             (BOStep(
                 lambda: self.bot.supply_used >= 17,
-                lambda: self.bot.already_pending(UnitTypeId.EXTRACTOR) or self.bot.units(UnitTypeId.EXTRACTOR).exists,
+                lambda: self.bot.already_pending(UnitTypeId.EXTRACTOR) or self.bot.units(UnitTypeId.EXTRACTOR).exists or self.bot.units(UnitTypeId.EXTRACTORRICH).exists,
                 UnitTypeId.EXTRACTOR
             )),
             (BOStep(

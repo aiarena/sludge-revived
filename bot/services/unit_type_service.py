@@ -45,7 +45,7 @@ def get_creation_resource_mapping(race: Race):
 
 def get_unit_counters(own_race : Race, enemy_race : Race) -> Dict[UnitTypeId,Dict[UnitTypeId, float or int]]:
     if own_race == Race.Zerg:
-        mus_possible = {Race.Zerg : 'zvz', Race.Protoss : 'zvp', Race.Terran : 'zvt'}
+        mus_possible = {Race.Zerg: 'zvz', Race.Protoss: 'zvp', Race.Terran: 'zvt',  Race.Random: 'zvr'}
         own_locals = locals().copy()
         exec(f'from bot.util.zerg_unit_counters import unit_counters_{mus_possible[enemy_race]} as unit_counters', globals(), own_locals)
         return defaultdict(lambda: defaultdict(lambda: 1), {unit_id : defaultdict(lambda: 1, counters) for unit_id, counters in own_locals['unit_counters'].items()})

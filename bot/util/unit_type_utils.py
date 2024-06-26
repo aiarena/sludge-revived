@@ -25,7 +25,7 @@ unit_range = {
     UnitTypeId.INFESTOR: 6
 }
 
-zerg_structures = {UnitTypeId.HATCHERY, UnitTypeId.LAIR, UnitTypeId.HIVE, UnitTypeId.EXTRACTOR, UnitTypeId.SPINECRAWLER, UnitTypeId.SPORECRAWLER,
+zerg_structures = {UnitTypeId.HATCHERY, UnitTypeId.LAIR, UnitTypeId.HIVE, UnitTypeId.EXTRACTOR, UnitTypeId.EXTRACTORRICH, UnitTypeId.SPINECRAWLER, UnitTypeId.SPORECRAWLER,
 UnitTypeId.BANELINGNEST, UnitTypeId.INFESTATIONPIT, UnitTypeId.SPIRE, UnitTypeId.GREATERSPIRE, UnitTypeId.EVOLUTIONCHAMBER,
     UnitTypeId.SPAWNINGPOOL, UnitTypeId.ROACHWARREN, UnitTypeId.HYDRALISKDEN, UnitTypeId.ULTRALISKCAVERN}
 
@@ -46,6 +46,7 @@ origin_type: Dict[Union[UnitTypeId, UpgradeId], UnitTypeId] = {
 
     UnitTypeId.HATCHERY: UnitTypeId.DRONE,
     UnitTypeId.EXTRACTOR: UnitTypeId.DRONE,
+    UnitTypeId.EXTRACTORRICH: UnitTypeId.DRONE,
     UnitTypeId.SPAWNINGPOOL: UnitTypeId.DRONE,
     UnitTypeId.BANELINGNEST: UnitTypeId.DRONE,
     UnitTypeId.ROACHWARREN: UnitTypeId.DRONE,

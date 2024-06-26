@@ -14,34 +14,34 @@ class DebugService():
     async def render_debug(self):
         if self.disabled:
             return
-        await self._bot._client.send_debug()
+        # await self._bot._client.send_debug()
     
     def text_world(self, *args):
         if self.disabled:
             return
-        self._bot._client.debug_text_world(*args)
+        # self._bot._client.debug_text_world(*args)
 
     def text_simple(self, msg: str):
         if self.disabled:
             return
-        if self._bot._client:
-            debug_msg = self.to_debug_message(msg) 
-            self._bot._client._debug_texts.append(debug_msg)
+        # if self._bot._client:
+        #     debug_msg = self.to_debug_message(msg) 
+        #     self._bot._client._debug_texts.append(debug_msg)
 
     def line_out(self, *args):
         if self.disabled:
             return
-        self._bot._client.debug_line_out(*args)
+        # self._bot._client.debug_line_out(*args)
 
     def sphere_out(self, *args):
         if self.disabled:
             return
-        self._bot._client.debug_sphere_out(*args)
+        # self._bot._client.debug_sphere_out(*args)
 
     def box_out(self, *args):
         if self.disabled:
             return
-        self._bot._client.debug_box_out(*args)
+        # self._bot._client.debug_box_out(*args)
     
     def text_screen_auto(self, text: str, line: int = 0, column: int = 0, color = None):
         if self.disabled:
@@ -49,7 +49,7 @@ class DebugService():
         if isinstance(color, tuple):
             color = Point3(color)
         pos = Point2((column * 0.1, line * 0.015))
-        self._bot._client.debug_text_screen(text, pos, color, 12)
+        # self._bot._client.debug_text_screen(text, pos, color, 12)
 
     
     # edited from python-sc2

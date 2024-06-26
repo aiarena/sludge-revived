@@ -86,7 +86,7 @@ class MyBot(sc2.BotAI):
         #for threat in self.state_service.threats:
         #    pos = threat.location
         #    self.debug_service.text_world(f'Threat: {threat.value}, {threat.ground_value}, {threat.air_value}, {threat.cloak_value}', Point3((pos.x, pos.y, 10)), None, 12)
-        await self.debug_service.render_debug()
+        # await self.debug_service.render_debug()
         self.action_service.clear()
         self.state_service.previous_iter_own_units = self.state_service.own_units
     

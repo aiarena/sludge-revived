@@ -118,17 +118,17 @@ class UnitManager_v3:
             self.append_proxy_scouts(unassigned_scouts)
         unassigned = unassigned.tags_not_in(self.proxy_scouts.tags)
         '''
-
-        # idle position at nearest base
-        for unit in unassigned:
-            unit: Unit
-            if unit.movement_speed > 0 and unit.type_id not in {UnitTypeId.OVERLORD, UnitTypeId.LARVA}:
-                pos = unit.position.closest(self.state.own_townhalls).position
-                if unit.distance_to(pos) < 10:
-                    self.action_service.add(unit.tag, unit.attack(pos))
-                else:
-                    self.action_service.add(unit.tag, unit.move(pos))
-                self.debug_service.text_world(f'IDLE', unit.position3d, None, 16)
+        if self.state.own_townhalls:
+            # idle position at nearest base
+            for unit in unassigned:
+                unit: Unit
+                if unit.movement_speed > 0 and unit.type_id not in {UnitTypeId.OVERLORD, UnitTypeId.LARVA}:
+                    pos = unit.position.closest(self.state.own_townhalls).position
+                    if unit.distance_to(pos) < 10:
+                        self.action_service.add(unit.tag, unit.attack(pos))
+                    else:
+                        self.action_service.add(unit.tag, unit.move(pos))
+                    # self.debug_service.text_world(f'IDLE', unit.position3d, None, 16)
         
 
     def priority_apply_unit_modifier(self, priority, enemy_group: UnitGroup, unit: Unit):
@@ -175,10 +175,11 @@ class UnitManager_v3:
                 and enemy_group.units.exclude_type({UnitTypeId.SCV, UnitTypeId.PROBE, UnitTypeId.DRONE}).exists
                 and enemy_group.range_hull
                 and distance_from_boundary(enemy_group.range_hull, unit.position) <= 1
+                and self.state.own_townhalls
                 and unit.position.distance_to_closest(self.state.own_townhalls) < 15
             )
         elif unit.type_id == UnitTypeId.QUEEN:
-            return priority > 0 and (enemy_group.location.distance_to_closest(self.state.own_townhalls.ready) < 20 or (self.state._bot.has_creep(enemy_group.location) and enemy_group.location.distance_to_closest(self.state.own_townhalls.ready) < 30))
+            return priority > 0 and self.state.own_townhalls.ready and (enemy_group.location.distance_to_closest(self.state.own_townhalls.ready) < 20 or (self.state._bot.has_creep(enemy_group.location) and enemy_group.location.distance_to_closest(self.state.own_townhalls.ready) < 30))
         elif unit.type_id in {UnitTypeId.CHANGELING, UnitTypeId.CHANGELINGMARINE, UnitTypeId.CHANGELINGMARINESHIELD, UnitTypeId.CHANGELINGZEALOT, UnitTypeId.CHANGELINGZERGLING, UnitTypeId.CHANGELINGZERGLINGWINGS}:
             return False
         elif unit.type_id == UnitTypeId.OVERSEER:
@@ -252,7 +253,7 @@ class UnitManager_v3:
             if sorted_enemy_groups.isEmpty():
                 continue
             enemy_group: UnitGroup = sorted_enemy_groups.peek()
-            self.debug_service.text_world(f'{round(sorted_enemy_groups.peek2()[1],2)}', Point3((unit.position3d.x, unit.position3d.y - 0.35, unit.position3d.z)), Point3((0, 255, 0)), 12)
+            # self.debug_service.text_world(f'{round(sorted_enemy_groups.peek2()[1],2)}', Point3((unit.position3d.x, unit.position3d.y - 0.35, unit.position3d.z)), Point3((0, 255, 0)), 12)
             if (not unit.can_attack_air and enemy_group.percentage_of_air_in_group > 0.8) or (unit.type_id in {UnitTypeId.DRONE} and d[enemy_group].value > enemy_group.value):
                 d[enemy_group].retreaters.append(unit)
             else:

@@ -59,8 +59,8 @@ def convert(build_dict : dict, state : StateService) -> List[BOStep]:
         for supply, count in build_dict['gas']:
             build_order.append(BOStep(
                     supply,
-                    lambda x=count: state.get_unit_count(UnitTypeId.EXTRACTOR) >= x,
-                    lambda x=count: state.get_unit_count(UnitTypeId.EXTRACTOR) < x,
+                    lambda x=count: state.get_unit_count(UnitTypeId.EXTRACTOR)+state.get_unit_count(UnitTypeId.EXTRACTORRICH) >= x,
+                    lambda x=count: state.get_unit_count(UnitTypeId.EXTRACTOR)+state.get_unit_count(UnitTypeId.EXTRACTORRICH) < x,
                     UnitTypeId.EXTRACTOR
             ))
 
@@ -148,8 +148,8 @@ def convert(build_dict : dict, state : StateService) -> List[BOStep]:
 #remember that tech_alias property for unittypeids exists
 def prereq_building_bool(buildings : Tuple[UnitTypeId], state : StateService) -> bool:
     for building in buildings:
-        if building == UnitTypeId.EXTRACTOR:
-            if state.get_unit_count(UnitTypeId.EXTRACTOR) < 1:
+        if building in {UnitTypeId.EXTRACTOR,UnitTypeId.EXTRACTORRICH}:
+            if state.get_unit_count(UnitTypeId.EXTRACTOR)+state.get_unit_count(UnitTypeId.EXTRACTORRICH) < 1:
                 return False
         else:
             if not state.own_structures(building).ready.exists:

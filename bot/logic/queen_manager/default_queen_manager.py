@@ -75,7 +75,8 @@ class DefaultQueenManager(QueenManagerInterface):
                             self.action_service.add(inject_queen.tag, inject_queen.move(hatch.position))
                             self.assigned_tags.add(inject_queen.tag)
                 except:
-                    print('inject error')
+                    pass
+                    # print('inject error')
             else:
                 del self.state.injected_hatches[hatch_tag]
         

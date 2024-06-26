@@ -96,7 +96,7 @@ class EcoBalanceService:
         m, v = self.worker_assignment(workers.amount)
         if current_gas_saturation > v:
             extractor_drones = self.state.own_units(UnitTypeId.DRONE).filter(
-                lambda u: self.state.own_structures.find_by_tag(u.order_target) and self.state.own_structures.find_by_tag(u.order_target).type_id == UnitTypeId.EXTRACTOR
+                lambda u: self.state.own_structures.find_by_tag(u.order_target) and self.state.own_structures.find_by_tag(u.order_target).type_id in {UnitTypeId.EXTRACTOR,UnitTypeId.EXTRACTORRICH}
             )
             if extractor_drones.exists:
                 u = extractor_drones.random_group_of(int(current_gas_saturation - v))
@@ -109,7 +109,7 @@ class EcoBalanceService:
         m, v = self.worker_assignment(drones.amount)
         self.req_extractors = int(v / 3)
 
-        for extractor in self.state.own_structures(UnitTypeId.EXTRACTOR):
+        for extractor in self.state.own_structures.of_type({UnitTypeId.EXTRACTOR,UnitTypeId.EXTRACTORRICH}):
             extractor: Unit = extractor
             assigned = 1
             while (assigned < extractor.ideal_harvesters
@@ -130,7 +130,7 @@ class EcoBalanceService:
             mid_field = mins.closest_to(mins.center)
             assigned_count = 0
             ideal_harvesters = townhall.ideal_harvesters
-            ex = self.state.own_structures(UnitTypeId.EXTRACTOR).closer_than(10, townhall.position).ready
+            ex = self.state.own_structures.of_type({UnitTypeId.EXTRACTOR,UnitTypeId.EXTRACTORRICH}).closer_than(10, townhall.position).ready
             for e in ex:
                 ideal_harvesters += 3
                 ideal_harvesters -= e.assigned_harvesters
@@ -154,7 +154,7 @@ class EcoBalanceService:
         self.req_extractors = int(v / 3)
 
         # saturate extractors
-        for extractor in self.state.own_structures(UnitTypeId.EXTRACTOR).ready:
+        for extractor in self.state.own_structures.of_type({UnitTypeId.EXTRACTOR,UnitTypeId.EXTRACTORRICH}).ready:
             extractor: Unit = extractor
             assigned = 0
 
@@ -191,7 +191,7 @@ class EcoBalanceService:
             if len(drone.orders) > 0 and (drone.orders[0].ability.id == AbilityId.HARVEST_RETURN or drone.orders[0].ability.id == AbilityId.HARVEST_GATHER):
                 townhall = self.state.own_townhalls.closest_to(drone)
                 ideal_harvesters = townhall.ideal_harvesters
-                ex = self.state.own_structures(UnitTypeId.EXTRACTOR).closer_than(10, townhall.position).ready
+                ex = self.state.own_structures.of_type({UnitTypeId.EXTRACTOR,UnitTypeId.EXTRACTORRICH}).closer_than(10, townhall.position).ready
                 for e in ex:
                     ideal_harvesters += 3
                     ideal_harvesters -= e.assigned_harvesters
@@ -208,7 +208,7 @@ class EcoBalanceService:
             mid_field = mins.closest_to(mins.center)
             assigned_count = harvesters_on_townhall[townhall]
             ideal_harvesters = townhall.ideal_harvesters
-            ex = self.state.own_structures(UnitTypeId.EXTRACTOR).closer_than(10, townhall.position).ready
+            ex = self.state.own_structures.of_type({UnitTypeId.EXTRACTOR,UnitTypeId.EXTRACTORRICH}).closer_than(10, townhall.position).ready
             for e in ex:
                 ideal_harvesters += 3
                 ideal_harvesters -= e.assigned_harvesters
@@ -225,6 +225,6 @@ class EcoBalanceService:
 
     def gas_harvester_count(self):
         n = 0
-        for extractor in self.state.own_structures(UnitTypeId.EXTRACTOR):
+        for extractor in self.state.own_structures.of_type({UnitTypeId.EXTRACTOR,UnitTypeId.EXTRACTORRICH}):
             n += extractor.assigned_harvesters
         return n

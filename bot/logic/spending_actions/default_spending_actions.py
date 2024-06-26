@@ -25,7 +25,7 @@ class DefaultSpendingActions(SpendingActionsInterface):
     async def build(self, spending_list: List, units: Units) -> 'assigned Units':
         assigned = Units([], self._bot._game_data)
 
-        self.debug.text_screen_auto(f'{self.state.placement_requests}', 0, 4)
+        # self.debug.text_screen_auto(f'{self.state.placement_requests}', 0, 4)
         for placement_request in self.state.placement_requests:
             if placement_request == UnitTypeId.HATCHERY:
                 placement = await self.get_building_placement(placement_request)
@@ -64,7 +64,7 @@ class DefaultSpendingActions(SpendingActionsInterface):
         pos = Point2((0,0))
         if unit_id == UnitTypeId.HATCHERY:
             return await self._bot.get_next_expansion()
-        if unit_id == UnitTypeId.EXTRACTOR:
+        if unit_id in {UnitTypeId.EXTRACTOR,UnitTypeId.EXTRACTORRICH}:
             geysers = self.state.get_own_geysers()
             for geyser in geysers:
                 if await self._bot.can_place(UnitTypeId.EXTRACTOR, geyser.position):

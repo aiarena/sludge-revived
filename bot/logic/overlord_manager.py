@@ -25,8 +25,8 @@ class OverlordManager:
         self.first_overlord_tag = None
 
     async def on_step(self, overlords: Units):
-        for pos in self.unassigned_spots:
-            self.debug.text_world('ovie', Point3((pos.x, pos.y, 10)), None, 12)
+        # for pos in self.unassigned_spots:
+        #     self.debug.text_world('ovie', Point3((pos.x, pos.y, 10)), None, 12)
         
         if self.first_overlord_tag:
             O = self.state.enemy_natural_position

@@ -90,7 +90,7 @@ else:
 
         return priority_values
 
-    print('Enemy group priorities : ', str(get_priority_values(*get_enemy_group_data())))
+    # print('Enemy group priorities : ', str(get_priority_values(*get_enemy_group_data())))
 
-    print('Unit to group priorities : ', str(get_priority_values(*get_unit_group_data())))
+    # print('Unit to group priorities : ', str(get_priority_values(*get_unit_group_data())))
 

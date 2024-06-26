@@ -21,12 +21,12 @@ def PrintExecutionTime(func):
         start = time.time()
         func(*args, **kwargs)
         execution_time = calculate_execution_time(start)
-        print_execution_time(f'{get_class_that_defined_method(func)} : {func.__name__}', execution_time)
+        # print_execution_time(f'{get_class_that_defined_method(func)} : {func.__name__}', execution_time)
     async def async_wrapper(*args, **kwargs):
         start = time.time()
         await func(*args, **kwargs)
         execution_time = calculate_execution_time(start)
-        print_execution_time(f'{get_class_that_defined_method(func)} : {func.__name__}', execution_time)
+        # print_execution_time(f'{get_class_that_defined_method(func)} : {func.__name__}', execution_time)
     
     if (inspect.iscoroutinefunction(func)):
         return async_wrapper

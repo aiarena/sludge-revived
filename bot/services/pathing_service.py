@@ -31,17 +31,19 @@ class PathingService:
         rows = pathing.shape[0]
         cols = pathing.shape[1]
         
-        for x in range(0, rows):
-            for y in range(0, cols):
-                if pathing[x,y] == 0:
-                    self.debug.box_out(Point3((x, y, 10)), Point3((x+1, y+1, 11)))
+        # for x in range(0, rows):
+        #     for y in range(0, cols):
+        #         if pathing[x,y] == 0:
+        #             self.debug.box_out(Point3((x, y, 10)), Point3((x+1, y+1, 11)))
         
     def find_path(self, origin: Point2, destination: Point2, consider_threats = False) -> 'path, dist':
         if consider_threats:
             pf = sc2pathlib.PathFind(np.array(self.threat_grid, dtype=int))
         else:
             pf = sc2pathlib.PathFind(np.array(self.pathing_grid, dtype=int))
-        return pf.find_path((int(origin.x), int(origin.y)), (int(destination.x), int(destination.y)))
+        start_int = (int(origin.x), int(origin.y))
+        end_int =(int(destination.x), int(destination.y))
+        return pf.find_path(start_int, end_int, False, False, 1, None, None)
 
     def _test_path_find(self):
         pathing = np.array(self.pathing_grid, dtype=int)

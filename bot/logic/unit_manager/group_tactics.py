@@ -54,7 +54,7 @@ class GroupTactics:
                        )
                        or distance_from_boundary(group.group.range_hull, group.enemies.units.closest_to(group.group.location).position) <= 1)
         
-        self.debug_group(group)
+        # self.debug_group(group)
 
         own_units = group.group.units
         nearby_units = Units([], self.state._bot._game_data)
@@ -78,8 +78,8 @@ class GroupTactics:
             should_fight, (own_val, enemy_val) = self.evaluate_engagement(nearby_units, group.enemies, consider_disengage_proximity=True, show_group_vals=True, debug=True)
 
             #far away units should simply move towards the fight
-            for u in far_units:
-                self.debug.text_world(f'far', Point3((u.position3d.x, u.position3d.y, u.position3d.z)), None, 12)
+            # for u in far_units:
+            #     self.debug.text_world(f'far', Point3((u.position3d.x, u.position3d.y, u.position3d.z)), None, 12)
             self.action_service.command_group(far_units, AbilityId.ATTACK, group.enemies.location)
             self.assigned_tags = self.assigned_tags.union(far_units.tags)
 
@@ -163,9 +163,9 @@ class GroupTactics:
         if isinstance(enemy_group, Units):
             enemy_group = self.group_service.create_group(enemy_group)
 
-        if debug and enemy_group.range_hull:
-            for edge in own_group.range_hull:
-                self.debug.line_out(Point3((edge[0].x, edge[0].y, 10)), Point3((edge[1].x, edge[1].y, 10)), Point3((0, 0, 255)))
+        # if debug and enemy_group.range_hull:
+        #     for edge in own_group.range_hull:
+        #         self.debug.line_out(Point3((edge[0].x, edge[0].y, 10)), Point3((edge[1].x, edge[1].y, 10)), Point3((0, 0, 255)))
 
         '''Based on our supply or how close the enemy is to our base, we may be more willing to attack them.'''
         if 200 - self.state.resources.supply.used < 10:
@@ -215,9 +215,9 @@ class GroupTactics:
         pos1 = group.group.location
         pos2 = group.enemies.location
         self.debug.line_out(Point3((pos1.x, pos1.y, group.group.units.random.position3d.z + 0.1)), Point3((pos2.x, pos2.y, group.enemies.units.random.position3d.z + 0.1)))
-        for unit in group.group.units:
-            unit: Unit
-            self.debug.line_out(Point3((unit.position.x, unit.position.y, unit.position3d.z + 0.1)), Point3((pos2.x, pos2.y, group.enemies.units.random.position3d.z + 0.1)), Point3((128, 128, 128)))
+        # for unit in group.group.units:
+        #     unit: Unit
+        #     self.debug.line_out(Point3((unit.position.x, unit.position.y, unit.position3d.z + 0.1)), Point3((pos2.x, pos2.y, group.enemies.units.random.position3d.z + 0.1)), Point3((128, 128, 128)))
 
 
     def special_combat_considerations(self, own_group : UnitGroup, enemy_group : UnitGroup, outcome : float) -> ({'unit tags'}, {'unit tags'}):

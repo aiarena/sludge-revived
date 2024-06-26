@@ -29,7 +29,7 @@ class DefaultArmyTacticsManager(ArmyTacticsManagerInterface):
             total_value = surrounding_units_value + group_value
             group_center = group.center
             nearby_enemies_value = calculate_combat_value(self.state._bot, nearby_enemies)
-            self.debug.text_world(f'{total_value - nearby_enemies_value}', Point3((group_center.x, group_center.y, 10)), None, 12)
+            # self.debug.text_world(f'{total_value - nearby_enemies_value}', Point3((group_center.x, group_center.y, 10)), None, 12)
             if total_value > nearby_enemies_value:
                 self.action_service.command_group(group, AbilityId.ATTACK, nearby_enemies.center, 100)
             else:

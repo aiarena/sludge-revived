@@ -126,6 +126,7 @@ class DefaultResourceManager(ResourceManagerInterface):
                             minerals_left -= army_unit_resource_values[idx][0]
                             vespene_left -= army_unit_resource_values[idx][1]
         except:
-            print('optimal combination error')
+            pass
+            # print('optimal combination error')
 
         return output, minerals_left, vespene_left, supply_left, larva_left

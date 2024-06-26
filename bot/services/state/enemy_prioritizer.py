@@ -28,7 +28,7 @@ class EnemyPrioritizer:
         for group in groups:
             p = self.prioritize_group(group)
             res.enqueue(group, p)
-            self.debug.text_world(f'{group.value}, {round(p,2)}', Point3((group.location.x, group.location.y, 10)), Point3((255, 0 ,0)), 12)
+            # self.debug.text_world(f'{group.value}, {round(p,2)}', Point3((group.location.x, group.location.y, 10)), Point3((255, 0 ,0)), 12)
         unassigned = unassigned.tags_not_in(unfinished_cannons.tags)
 
         can_attack = unassigned.filter(is_combat_unit)
@@ -36,19 +36,19 @@ class EnemyPrioritizer:
         for group in groups:
             p = self.prioritize_group(group)
             res.enqueue(group, p)
-            self.debug.text_world(f'{group.value}, {round(p,2)}', Point3((group.location.x, group.location.y, 10)), Point3((255, 0, 0)), 12)
+            # self.debug.text_world(f'{group.value}, {round(p,2)}', Point3((group.location.x, group.location.y, 10)), Point3((255, 0, 0)), 12)
         unassigned = unassigned.tags_not_in(can_attack.tags)
 
         groups = self.group_service.create_groups(unassigned, no_range=True)
         for group in groups:
             p = self.prioritize_group(group)
             res.enqueue(group, p)
-            self.debug.text_world(f'{group.value}, {round(p,2)}', Point3((group.location.x, group.location.y, 10)), Point3((255, 0 ,0)), 12)
+            # self.debug.text_world(f'{group.value}, {round(p,2)}', Point3((group.location.x, group.location.y, 10)), Point3((255, 0 ,0)), 12)
 
-        for group in res:
-            if group.range_hull:
-                for edge in group.range_hull:
-                    self.debug.line_out(Point3((edge[0].x, edge[0].y, 10)), Point3((edge[1].x, edge[1].y, 10)), Point3((255, 0, 0)))
+        # for group in res:
+        #     if group.range_hull:
+        #         for edge in group.range_hull:
+        #             self.debug.line_out(Point3((edge[0].x, edge[0].y, 10)), Point3((edge[1].x, edge[1].y, 10)), Point3((255, 0, 0)))
 
         return res
 
