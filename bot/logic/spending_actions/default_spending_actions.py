@@ -1,5 +1,6 @@
 from typing import List, Union
 
+from sc2.unit import Unit
 from sc2.unit_command import UnitCommand
 from sc2 import UnitTypeId, BotAI, AbilityId
 from sc2.units import Units
@@ -54,6 +55,8 @@ class DefaultSpendingActions(SpendingActionsInterface):
             placement = await self.get_building_placement(target_id)
         builder: Unit = self.get_builder(origin_type, units, placement)
         if builder:
+            if origin_type == UnitTypeId.ZERGLING:
+                return builder(AbilityId.MORPHTOBANELING_BANELING)
             if origin_type == UnitTypeId.DRONE:
                 return builder.build(target_id, placement)
             if isinstance(target_id, UpgradeId):
