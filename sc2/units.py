@@ -53,10 +53,6 @@ class Units(list):
         return self.subgroup(self)
 
     def __or__(self, other: "Units") -> "Units":
-        if self is None:
-            return other
-        if other is None:
-            return self
         return Units(
             chain(
                 iter(self),
@@ -65,17 +61,9 @@ class Units(list):
         )
 
     def __and__(self, other: "Units") -> "Units":
-        if self is None:
-            return other
-        if other is None:
-            return self
         return Units(other_unit for other_unit in other if other_unit.tag in (self_unit.tag for self_unit in self))
 
     def __sub__(self, other: "Units") -> "Units":
-        if self is None:
-            return Units([])
-        if other is None:
-            return self
         return Units(self_unit for self_unit in self if self_unit.tag not in (other_unit.tag for other_unit in other))
 
     def __hash__(self):
@@ -107,7 +95,7 @@ class Units(list):
 
     @property
     def first(self) -> Unit:
-        assert self, "Units object is empty"
+        assert self
         return self[0]
 
     # NOTE former argument 'require_all' is not needed any more
@@ -121,7 +109,7 @@ class Units(list):
 
     @property
     def random(self) -> Unit:
-        assert self, "Units object is empty"
+        assert self.exists
         return random.choice(self)
 
     def random_or(self, other: any) -> Unit:
@@ -148,40 +136,33 @@ class Units(list):
     def closest_distance_to(self, position: Union[Unit, Point2, Point3]) -> Union[int, float]:
         """ Returns the distance between the closest unit from this group to the target unit """
         assert self, "Units object is empty"
-        if isinstance(position, Unit):
-            position = position.position
+        position = position.position
         return position.distance_to_closest(u.position for u in self)
 
     def furthest_distance_to(self, position: Union[Unit, Point2, Point3]) -> Union[int, float]:
         """ Returns the distance between the furthest unit from this group to the target unit """
         assert self, "Units object is empty"
-        if isinstance(position, Unit):
-            position = position.position
+        position = position.position
         return position.distance_to_furthest(u.position for u in self)
 
     def closest_to(self, position: Union[Unit, Point2, Point3]) -> Unit:
         assert self, "Units object is empty"
-        if isinstance(position, Unit):
-            position = position.position
+        position = position.position
         return position.closest(self)
 
     def furthest_to(self, position: Union[Unit, Point2, Point3]) -> Unit:
-        assert self, "Units object is empty"
+        assert self.exists
         if isinstance(position, Unit):
             position = position.position
         return position.furthest(self)
 
     def closer_than(self, distance: Union[int, float], position: Union[Unit, Point2, Point3]) -> "Units":
-        if isinstance(position, Unit):
-            position = position.position
-        distance_squared = distance ** 2
-        return self.filter(lambda unit: unit.position._distance_squared(position.to2) < distance_squared)
+        position = position.position
+        return self.filter(lambda unit: unit.distance_to(position.to2) < distance)
 
     def further_than(self, distance: Union[int, float], position: Union[Unit, Point2, Point3]) -> "Units":
-        if isinstance(position, Unit):
-            position = position.position
-        distance_squared = distance ** 2
-        return self.filter(lambda unit: unit.position._distance_squared(position.to2) > distance_squared)
+        position = position.position
+        return self.filter(lambda unit: unit.distance_to(position.to2) > distance)
 
     def subgroup(self, units):
         return Units(units)
@@ -195,20 +176,16 @@ class Units(list):
     def sorted_by_distance_to(self, position: Union[Unit, Point2], reverse: bool = False) -> "Units":
         """ This function should be a bit faster than using units.sorted(keyfn=lambda u: u.distance_to(position)) """
         position = position.position
-        return self.sorted(keyfn=lambda unit: unit.position._distance_squared(position), reverse=reverse)
+        return self.sorted(keyfn=lambda unit: unit.distance_to(position), reverse=reverse)
 
     def tags_in(self, other: Union[Set[int], List[int], Dict[int, Any]]) -> "Units":
         """ Filters all units that have their tags in the 'other' set/list/dict """
         # example: self.units(QUEEN).tags_in(self.queen_tags_assigned_to_do_injects)
-        if isinstance(other, list):
-            other = set(other)
         return self.filter(lambda unit: unit.tag in other)
 
     def tags_not_in(self, other: Union[Set[int], List[int], Dict[int, Any]]) -> "Units":
         """ Filters all units that have their tags not in the 'other' set/list/dict """
         # example: self.units(QUEEN).tags_not_in(self.queen_tags_assigned_to_do_injects)
-        if isinstance(other, list):
-            other = set(other)
         return self.filter(lambda unit: unit.tag not in other)
 
     def of_type(self, other: Union[UnitTypeId, Set[UnitTypeId], List[UnitTypeId], Dict[UnitTypeId, Any]]) -> "Units":
@@ -216,8 +193,6 @@ class Units(list):
         # example: self.units.of_type([ZERGLING, ROACH, HYDRALISK, BROODLORD])
         if isinstance(other, UnitTypeId):
             other = {other}
-        if isinstance(other, list):
-            other = set(other)
         return self.filter(lambda unit: unit.type_id in other)
 
     def exclude_type(
@@ -260,7 +235,7 @@ class Units(list):
         'self.units.same_tech(UnitTypeId.ORBITALCOMMAND)'
         returns OrbitalCommand and OrbitalCommandFlying
         This also works with a set/list/dict parameter, e.g. 'self.units.same_tech({UnitTypeId.COMMANDCENTER, UnitTypeId.SUPPLYDEPOT})'
-        Untested: This should return the equivalents for WarpPrism, Observer, Overseer, SupplyDepot and other units that have different modes but still act as the same unit
+        Untested: This should return the equivalents for WarpPrism, Observer, Overseer, SupplyDepot and others
         """
         if isinstance(other, UnitTypeId):
             other = {other}
@@ -383,3 +358,4 @@ class UnitSelection(Units):
             assert isinstance(
                 selection, (UnitTypeId, set)
             ), f"selection is not None or of type UnitTypeId or Set[UnitTypeId]"
+

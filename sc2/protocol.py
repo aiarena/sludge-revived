@@ -1,13 +1,15 @@
 import asyncio
+import sys
 
 import logging
-import sys
+logger = logging.getLogger(__name__)
 
 from s2clientprotocol import sc2api_pb2 as sc_pb
 
 from .data import Status
 
 logger = logging.getLogger(__name__)
+
 
 
 class ProtocolError(Exception):
@@ -18,6 +20,7 @@ class ProtocolError(Exception):
 
 class ConnectionAlreadyClosed(ProtocolError):
     pass
+
 
 class Protocol:
     def __init__(self, ws):
@@ -30,16 +33,17 @@ class Protocol:
         try:
             await self._ws.send_bytes(request.SerializeToString())
         except TypeError:
-            logger.exception("Cannot send: Connection already closed.")
-            raise ConnectionAlreadyClosed("Connection already closed.")
+            raise ConnectionAlreadyClosed("Cannot send: Connection already closed.")
         logger.debug(f"Request sent")
 
         response = sc_pb.Response()
         try:
             response_bytes = await self._ws.receive_bytes()
         except TypeError:
-            logger.exception("Cannot receive: Connection already closed.")
-            raise ConnectionAlreadyClosed("Connection already closed.")
+            # logger.exception("Cannot receive: Connection already closed.")
+            # raise ConnectionAlreadyClosed("Connection already closed.")
+            logger.info("Cannot receive: Connection already closed.")
+            sys.exit(2)
         except asyncio.CancelledError:
             # If request is sent, the response must be received before reraising cancel
             try:

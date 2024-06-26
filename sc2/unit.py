@@ -3,6 +3,7 @@ from typing import Any, Dict, List, Optional, Set, Tuple, Union  # mypy type che
 
 from . import unit_command
 from .cache import property_immutable_cache, property_mutable_cache
+from .constants import transforming
 from .data import Alliance, Attribute, CloakState, DisplayType, Race, TargetType, warpgate_abilities
 from .ids.ability_id import AbilityId
 from .ids.buff_id import BuffId
@@ -42,13 +43,10 @@ class UnitOrder:
         return f"UnitOrder({self.ability}, {self.target}, {self.progress})"
 
 
-class PassengerUnit:
-    """ Is inherited by the Unit class. Everything in here is also available in Unit. """
-
+class Unit:
     def __init__(self, proto_data):
         self._proto = proto_data
         self.cache = {}
-        self._pos = Point2.from_proto(self._proto.pos)
 
     def __repr__(self) -> str:
         """ Returns string of this form: PassengerUnit(name='SCV', tag=4396941328). """
@@ -132,18 +130,24 @@ class PassengerUnit:
         For SCV, this returns None """
         return self._type_data.unit_alias
 
-    @property
+    @property_immutable_cache
     def _weapons(self):
         """ Returns the weapons of the unit. """
-        if hasattr(self._type_data._proto, "weapons"):
+        try:
             return self._type_data._proto.weapons
-        return None
+        except:
+            return None
 
-    @property
+    @property_immutable_cache
     def can_attack(self) -> bool:
         """ Checks if the unit can attack at all. """
         # TODO BATTLECRUISER doesnt have weapons in proto?!
         return bool(self._weapons) or self.type_id == UnitTypeId.BATTLECRUISER
+
+    @property_immutable_cache
+    def can_attack_both(self) -> bool:
+        """ Checks if the unit can attack both ground and air units. """
+        return self.can_attack_ground and self.can_attack_air
 
     @property_immutable_cache
     def can_attack_ground(self) -> bool:
@@ -296,11 +300,6 @@ class PassengerUnit:
             return 0
         return self._proto.energy / self._proto.energy_max
 
-
-class Unit(PassengerUnit):
-
-    # All type data is in PassengerUnit.
-
     @property_immutable_cache
     def is_snapshot(self) -> bool:
         """ Checks if the unit is only available as a snapshot for the bot.
@@ -310,7 +309,9 @@ class Unit(PassengerUnit):
 
     @property_immutable_cache
     def is_visible(self) -> bool:
-        """ Checks if the unit is visible for the bot. """
+        """ Checks if the unit is visible for the bot.
+        NOTE: This means the bot has vision of the position of the unit!
+        It does not give any information about the cloak status of the unit."""
         return self._proto.display_type == DisplayType.Visible.value
 
     @property_immutable_cache
@@ -332,14 +333,14 @@ class Unit(PassengerUnit):
     def owner_id(self) -> int:
         """ Returns the owner of the unit. """
         return self._proto.owner
-    
+
     def set_position(self, position: Point2):
         self._pos = position
 
-    @property
+    @property_immutable_cache
     def position(self) -> Point2:
         """ Returns the 2d position of the unit. """
-        return self._pos
+        return Point2.from_proto(self._proto.pos)
 
     @property_immutable_cache
     def position3d(self) -> Point3:
@@ -387,6 +388,16 @@ class Unit(PassengerUnit):
         }
 
     @property_immutable_cache
+    def is_revealed(self) -> bool:
+        """ Checks if the unit is revealed. """
+        return self._proto.cloak is CloakState.CloakedDetected.value
+
+    @property_immutable_cache
+    def can_be_attacked(self) -> bool:
+        """ Checks if the unit is revealed or not cloaked and therefore can be attacked """
+        return self._proto.cloak in {CloakState.NotCloaked.value, CloakState.CloakedDetected.value}
+
+    @property_immutable_cache
     def buffs(self) -> Set:
         """ Returns the set of current buffs the unit has. """
         return {BuffId(buff_id) for buff_id in self._proto.buff_ids}
@@ -394,35 +405,27 @@ class Unit(PassengerUnit):
     @property_immutable_cache
     def is_carrying_minerals(self) -> bool:
         """ Checks if a worker or MULE is carrying (gold-)minerals. """
-        return any(
-            buff in self.buffs for buff in {BuffId.CARRYMINERALFIELDMINERALS, BuffId.CARRYHIGHYIELDMINERALFIELDMINERALS}
-        )
+        return not {BuffId.CARRYMINERALFIELDMINERALS, BuffId.CARRYHIGHYIELDMINERALFIELDMINERALS}.isdisjoint(self.buffs)
 
     @property_immutable_cache
     def is_carrying_vespene(self) -> bool:
         """ Checks if a worker is carrying vespene gas. """
-        return any(
-            buff in self.buffs
-            for buff in {
-                BuffId.CARRYHARVESTABLEVESPENEGEYSERGAS,
-                BuffId.CARRYHARVESTABLEVESPENEGEYSERGASPROTOSS,
-                BuffId.CARRYHARVESTABLEVESPENEGEYSERGASZERG,
-            }
-        )
+        return not {
+            BuffId.CARRYHARVESTABLEVESPENEGEYSERGAS,
+            BuffId.CARRYHARVESTABLEVESPENEGEYSERGASPROTOSS,
+            BuffId.CARRYHARVESTABLEVESPENEGEYSERGASZERG,
+        }.isdisjoint(self.buffs)
 
     @property_immutable_cache
     def is_carrying_resource(self) -> bool:
         """ Checks if a worker is carrying a resource. """
-        return any(
-            buff in self.buffs
-            for buff in {
-                BuffId.CARRYMINERALFIELDMINERALS,
-                BuffId.CARRYHIGHYIELDMINERALFIELDMINERALS,
-                BuffId.CARRYHARVESTABLEVESPENEGEYSERGAS,
-                BuffId.CARRYHARVESTABLEVESPENEGEYSERGASPROTOSS,
-                BuffId.CARRYHARVESTABLEVESPENEGEYSERGASZERG,
-            }
-        )
+        return not {
+            BuffId.CARRYMINERALFIELDMINERALS,
+            BuffId.CARRYHIGHYIELDMINERALFIELDMINERALS,
+            BuffId.CARRYHARVESTABLEVESPENEGEYSERGAS,
+            BuffId.CARRYHARVESTABLEVESPENEGEYSERGASPROTOSS,
+            BuffId.CARRYHARVESTABLEVESPENEGEYSERGASZERG,
+        }.isdisjoint(self.buffs)
 
     @property_immutable_cache
     def detect_range(self) -> Union[int, float]:
@@ -491,6 +494,41 @@ class Unit(PassengerUnit):
         """ Returns True if the unit is your own hallucination or detected. """
         return self._proto.is_hallucination
 
+    @property_immutable_cache
+    def attack_upgrade_level(self) -> int:
+        """ Returns the upgrade level of the units attack. """
+        # TODO: what does this return for units without a weapon?
+        # TODO: somehow store all weapon/armor/shield upgrades of the enemy to
+        # always have it available and update if you see a higher value
+        return self._proto.attack_upgrade_level
+
+    @property_immutable_cache
+    def armor_upgrade_level(self) -> int:
+        """ Returns the upgrade level of the units armor. """
+        return self._proto.armor_upgrade_level
+
+    @property_immutable_cache
+    def shield_upgrade_level(self) -> int:
+        """ Returns the upgrade level of the units shield. """
+        # TODO: what does this return for units without a shield?
+        return self._proto.shield_upgrade_level
+
+    @property_immutable_cache
+    def buff_duration_remain(self) -> int:
+        """ ??? """
+        # TODO what does this actually show?
+        # is it for all buffs or just the remaning life time indicator
+        # TODO what does this and the max value show for units without an indicator?
+        return self._proto.buff_duration_remain
+
+    @property_immutable_cache
+    def buff_duration_max(self) -> int:
+        """ ??? """
+        # TODO what does this actually show?
+        # is it for all buffs or just the remaning life time indicator
+        # TODO what does this show for units without an indicator?
+        return self._proto.buff_duration_max
+
     # PROPERTIES BELOW THIS COMMENT ARE NOT POPULATED FOR ENEMIES
 
     @property_mutable_cache
@@ -520,69 +558,94 @@ class Unit(PassengerUnit):
         """ Checks if unit is idle. """
         return not self.orders
 
+    def is_using_ability(self, abilities: Union[AbilityId, Set[AbilityId]]) -> bool:
+        """ Check if the unit is using one of the given abilities.
+        Only works for own units. """
+        if not self.orders:
+            return False
+        if isinstance(abilities, AbilityId):
+            abilities = {abilities}
+        return self.orders[0].ability.id in abilities
+
     @property_immutable_cache
     def is_moving(self) -> bool:
-        """ Checks if the unit is moving. """
-        return self.orders and self.orders[0].ability.id is AbilityId.MOVE
+        """ Checks if the unit is moving.
+        Only works for own units. """
+        return self.is_using_ability(AbilityId.MOVE)
 
     @property_immutable_cache
     def is_attacking(self) -> bool:
-        """ Checks if the unit is attacking. """
-        return self.orders and self.orders[0].ability.id in {
-            AbilityId.ATTACK,
-            AbilityId.ATTACK_ATTACK,
-            AbilityId.ATTACK_ATTACKTOWARDS,
-            AbilityId.ATTACK_ATTACKBARRAGE,
-            AbilityId.SCAN_MOVE,
-        }
+        """ Checks if the unit is attacking.
+        Only works for own units. """
+        return self.is_using_ability(
+            {
+                AbilityId.ATTACK,
+                AbilityId.ATTACK_ATTACK,
+                AbilityId.ATTACK_ATTACKTOWARDS,
+                AbilityId.ATTACK_ATTACKBARRAGE,
+                AbilityId.SCAN_MOVE,
+            }
+        )
 
     @property_immutable_cache
     def is_patrolling(self) -> bool:
-        """ Checks if a unit is patrolling. """
-        return self.orders and self.orders[0].ability.id is AbilityId.PATROL
+        """ Checks if a unit is patrolling.
+        Only works for own units. """
+        return self.is_using_ability(AbilityId.PATROL)
 
     @property_immutable_cache
     def is_gathering(self) -> bool:
-        """ Checks if a unit is on its way to a mineral field or vespene geyser to mine. """
-        return self.orders and self.orders[0].ability.id is AbilityId.HARVEST_GATHER
+        """ Checks if a unit is on its way to a mineral field or vespene geyser to mine.
+        Only works for own units. """
+        return self.is_using_ability(AbilityId.HARVEST_GATHER)
 
     @property_immutable_cache
     def is_returning(self) -> bool:
-        """ Checks if a unit is returning from mineral field or vespene geyser to deliver resources to townhall. """
-        return self.orders and self.orders[0].ability.id is AbilityId.HARVEST_RETURN
+        """ Checks if a unit is returning from mineral field or vespene geyser to deliver resources to townhall.
+        Only works for own units. """
+        return self.is_using_ability(AbilityId.HARVEST_RETURN)
 
     @property_immutable_cache
     def is_collecting(self) -> bool:
-        """ Checks if a unit is gathering or returning. """
-        return self.orders and self.orders[0].ability.id in {AbilityId.HARVEST_GATHER, AbilityId.HARVEST_RETURN}
+        """ Checks if a unit is gathering or returning.
+        Only works for own units. """
+        return self.is_using_ability({AbilityId.HARVEST_GATHER, AbilityId.HARVEST_RETURN})
 
     @property_immutable_cache
     def is_constructing_scv(self) -> bool:
-        """ Checks if the unit is an SCV that is currently building. """
-        return self.orders and self.orders[0].ability.id in {
-            AbilityId.TERRANBUILD_ARMORY,
-            AbilityId.TERRANBUILD_BARRACKS,
-            AbilityId.TERRANBUILD_BUNKER,
-            AbilityId.TERRANBUILD_COMMANDCENTER,
-            AbilityId.TERRANBUILD_ENGINEERINGBAY,
-            AbilityId.TERRANBUILD_FACTORY,
-            AbilityId.TERRANBUILD_FUSIONCORE,
-            AbilityId.TERRANBUILD_GHOSTACADEMY,
-            AbilityId.TERRANBUILD_MISSILETURRET,
-            AbilityId.TERRANBUILD_REFINERY,
-            AbilityId.TERRANBUILD_SENSORTOWER,
-            AbilityId.TERRANBUILD_STARPORT,
-            AbilityId.TERRANBUILD_SUPPLYDEPOT,
-        }
+        """ Checks if the unit is an SCV that is currently building.
+        Only works for own units. """
+        return self.is_using_ability(
+            {
+                AbilityId.TERRANBUILD_ARMORY,
+                AbilityId.TERRANBUILD_BARRACKS,
+                AbilityId.TERRANBUILD_BUNKER,
+                AbilityId.TERRANBUILD_COMMANDCENTER,
+                AbilityId.TERRANBUILD_ENGINEERINGBAY,
+                AbilityId.TERRANBUILD_FACTORY,
+                AbilityId.TERRANBUILD_FUSIONCORE,
+                AbilityId.TERRANBUILD_GHOSTACADEMY,
+                AbilityId.TERRANBUILD_MISSILETURRET,
+                AbilityId.TERRANBUILD_REFINERY,
+                AbilityId.TERRANBUILD_SENSORTOWER,
+                AbilityId.TERRANBUILD_STARPORT,
+                AbilityId.TERRANBUILD_SUPPLYDEPOT,
+            }
+        )
+
+    @property_immutable_cache
+    def is_transforming(self) -> bool:
+        """ Checks if the unit transforming.
+        Only works for own units. """
+        return self.type_id in transforming and self.is_using_ability(transforming[self.type_id])
 
     @property_immutable_cache
     def is_repairing(self) -> bool:
-        """ Checks if the unit is an SCV or MULE that is currently repairing. """
-        return self.orders and self.orders[0].ability.id in {
-            AbilityId.EFFECT_REPAIR,
-            AbilityId.EFFECT_REPAIR_MULE,
-            AbilityId.EFFECT_REPAIR_SCV,
-        }
+        """ Checks if the unit is an SCV or MULE that is currently repairing.
+        Only works for own units. """
+        return self.is_using_ability(
+            {AbilityId.EFFECT_REPAIR, AbilityId.EFFECT_REPAIR_MULE, AbilityId.EFFECT_REPAIR_SCV}
+        )
 
     @property_immutable_cache
     def add_on_tag(self) -> int:
@@ -601,9 +664,9 @@ class Unit(PassengerUnit):
         return self.position.offset(Point2((-2.5, 0.5)))
 
     @property_mutable_cache
-    def passengers(self) -> Set["PassengerUnit"]:
+    def passengers(self) -> Set["Unit"]:
         """ Returns the units inside a Bunker, CommandCenter, PlanetaryFortress, Medivac, Nydus, Overlord or WarpPrism. """
-        return {PassengerUnit(unit) for unit in self._proto.passengers}
+        return {Unit(unit) for unit in self._proto.passengers}
 
     @property_mutable_cache
     def passengers_tags(self) -> Set[int]:
@@ -704,10 +767,7 @@ class Unit(PassengerUnit):
             unit_attack_range = self.air_range
         else:
             return False
-        return (
-            self.position._distance_squared(target.position)
-            <= (self.radius + target.radius + unit_attack_range + bonus_distance) ** 2
-        )
+        return self.distance_to(target) <= self.radius + target.radius + unit_attack_range + bonus_distance
 
     def has_buff(self, buff) -> bool:
         """ Checks if unit has buff 'buff'. """
@@ -781,9 +841,10 @@ class Unit(PassengerUnit):
         return self.tag
 
     def __eq__(self, other):
-        if not isinstance(other, Unit):
+        try:
+            return self.tag == other.tag
+        except:
             return False
-        return self.tag == other.tag
 
     def __call__(self, ability, target=None, queue=False):
         return unit_command.UnitCommand(ability, self, target=target, queue=queue)

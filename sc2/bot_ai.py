@@ -1,20 +1,22 @@
+import itertools
 import logging
 import math
 import random
 from collections import Counter
 from typing import Any, Dict, List, Optional, Set, Tuple, Union  # mypy type checking
 
-from s2clientprotocol import common_pb2 as common_pb
-
 from .cache import property_cache_forever, property_cache_once_per_frame
 from .data import ActionResult, Alert, Race, Result, Target, race_gas, race_townhalls, race_worker
+from .data import ActionResult, Attribute, Race, race_worker, race_townhalls, race_gas, Target, Result
 from .game_data import AbilityData, GameData
 
 # imports for mypy and pycharm autocomplete
 from .game_state import GameState
+from .game_data import GameData, AbilityData
 from .ids.ability_id import AbilityId
 from .ids.unit_typeid import UnitTypeId
 from .ids.upgrade_id import UpgradeId
+from .pixel_map import PixelMap
 from .position import Point2, Point3
 from .unit import Unit
 from .units import Units
@@ -50,6 +52,12 @@ class BotAI:
         self.cached_known_enemy_units = None
 
     @property
+    def enemy_race(self) -> Race:
+        assert len(self._game_info.player_races) == 2, "enemy_race not available"
+        self.enemy_id = 3 - self.player_id
+        return Race(self._game_info.player_races[self.enemy_id])
+
+    @property
     def time(self) -> Union[int, float]:
         """ Returns time in seconds, assumes the game is played on 'faster' """
         return self.state.game_loop / 22.4  # / (1/1.4) * (1/16)
@@ -62,16 +70,45 @@ class BotAI:
 
     @property
     def game_info(self) -> "GameInfo":
-        """ See game_info.py """
         return self._game_info
 
-    @property
-    def nuke_detected(self) -> bool:
-        return any(alert == Alert.NuclearLaunchDetected.value for alert in self.state.alerts)
+    def alert(self, alert_code: Alert) -> bool:
+        """
+        Check if alert is triggered in the current step.
 
-    @property
-    def nydus_detected(self) -> bool:
-        return any(alert == Alert.NydusWormDetected.value for alert in self.state.alerts)
+        Example use:
+        from sc2.data import Alert
+        if self.alert(Alert.AddOnComplete):
+            print("Addon Complete")
+
+        Alert codes:
+
+        AlertError
+        AddOnComplete
+        BuildingComplete
+        BuildingUnderAttack
+        LarvaHatched
+        MergeComplete
+        MineralsExhausted
+        MorphComplete
+        MothershipComplete
+        MULEExpired
+        NuclearLaunchDetected
+        NukeComplete
+        NydusWormDetected
+        ResearchComplete
+        TrainError
+        TrainUnitComplete
+        TrainWorkerComplete
+        TransformationComplete
+        UnitUnderAttack
+        UpgradeComplete
+        VespeneExhausted
+        WarpInComplete
+
+        """
+        assert isinstance(alert_code, Alert), f"alert_code {alert_code} is no Alert"
+        return alert_code.value in self.state.alerts
 
     @property
     def start_location(self) -> Point2:
@@ -94,70 +131,97 @@ class BotAI:
 
     @property
     def main_base_ramp(self) -> "Ramp":
-        """ Returns the Ramp instance of the closest main-ramp to start location. Look in game_info.py for more information """
+        """ Returns the Ramp instance of the closest main-ramp to start location.
+        Look in game_info.py for more information """
         if hasattr(self, "cached_main_base_ramp"):
             return self.cached_main_base_ramp
-        """ The reason for len(ramp.upper) in {2, 5} is:
-        ParaSite map has 5 upper points, and most other maps have 2 upper points at the main ramp. The map Acolyte has 4 upper points at the wrong ramp (which is closest to the start position) """
-        self.cached_main_base_ramp = min(
-            (ramp for ramp in self.game_info.map_ramps if len(ramp.upper) in {2, 5}),
-            key=lambda r: self.start_location._distance_squared(r.top_center),
-        )
+        # The reason for len(ramp.upper) in {2, 5} is:
+        # ParaSite map has 5 upper points, and most other maps have 2 upper points at the main ramp.
+        # The map Acolyte has 4 upper points at the wrong ramp (which is closest to the start position).
+        try:
+            self.cached_main_base_ramp = min(
+                (ramp for ramp in self.game_info.map_ramps if len(ramp.upper) in {2, 5}),
+                key=lambda r: self.start_location.distance_to(r.top_center),
+            )
+        except ValueError:
+            # Hardcoded hotfix for Honorgrounds LE map, as that map has a large main base ramp with inbase natural
+            self.cached_main_base_ramp = min(
+                (ramp for ramp in self.game_info.map_ramps if len(ramp.upper) in {4, 9}),
+                key=lambda r: self.start_location.distance_to(r.top_center),
+            )
         return self.cached_main_base_ramp
 
     @property_cache_forever
     def expansion_locations(self) -> Dict[Point2, Units]:
-        """List of possible expansion locations."""
-        RESOURCE_SPREAD_THRESHOLD = 225
-        minerals = self.state.mineral_field
-        geysers = self.state.vespene_geyser
-        all_resources = minerals | geysers
+        """
+        Returns dict with the correct expansion position Point2 object as key,
+        resources (mineral field and vespene geyser) as value.
+        """
 
-        # Group nearby minerals together to form expansion locations
-        resource_groups = []
-        for mf in all_resources:
-            mf_height = self.get_terrain_height(mf.position)
-            for cluster in resource_groups:
-                # bases on standard maps dont have more than 10 resources
-                if len(cluster) == 10:
-                    continue
-                if mf.position._distance_squared(
-                    cluster[0].position
-                ) < RESOURCE_SPREAD_THRESHOLD and mf_height == self.get_terrain_height(cluster[0].position):
-                    cluster.append(mf)
+        # Idea: create a group for every resource, then merge these groups if
+        # any resource in a group is closer than a threshold to any resource of another group
+
+        # Distance we group resources by
+        resource_spread_threshold = 8.5
+        geysers = self.state.vespene_geyser
+        # Create a group for every resource
+        resource_groups = [
+            [resource]
+            for resource in self.state.resources
+            if resource.name != "MineralField450" # dont use low mineral count patches
+        ]
+        height_grid: PixelMap = self.game_info.terrain_height
+        # Loop the merging process as long as we change something
+        merged_group = True
+        while merged_group:
+            merged_group = False
+            # Check every combination of two groups
+            for group_a, group_b in itertools.combinations(resource_groups, 2):
+                # Check if any pair of resource of these groups is closer than threshold together
+                if any(
+                    resource_a.distance_to(resource_b) <= resource_spread_threshold
+                    # check if terrain height measurement at resources is within 10 units
+                    # this is since some older maps have inconsistent terrain height
+                    # tiles at certain expansion locations
+                    and abs(height_grid[resource_a.position.rounded] - height_grid[resource_b.position.rounded]) <= 10
+                    for resource_a, resource_b in itertools.product(group_a, group_b)
+                ):
+                    # Remove the single groups and add the merged group
+                    resource_groups.remove(group_a)
+                    resource_groups.remove(group_b)
+                    resource_groups.append(group_a + group_b)
+                    merged_group = True
                     break
-            else:  # not found
-                resource_groups.append([mf])
-        # Filter out bases with only one mineral field
-        resource_groups = (cluster for cluster in resource_groups if len(cluster) > 1)
-        # distance offsets from a gas geysir
-        offsets = [(x, y) for x in range(-9, 10) for y in range(-9, 10) if 75 >= x ** 2 + y ** 2 >= 49]
+        # Distance offsets we apply to center of each resource group to find expansion position
+        offset_range = 7
+        offsets = [
+            (x, y)
+            for x, y in itertools.product(range(-offset_range, offset_range + 1), repeat=2)
+            if math.hypot(x, y) <= 8
+        ]
+        # Dict we want to return
         centers = {}
-        # for every resource group:
+        # For every resource group:
         for resources in resource_groups:
-            # possible expansion points
-            # resources[-1] is a gas geysir which always has (x.5, y.5) coordinates, just like an expansion
-            possible_points = (
-                Point2((offset[0] + resources[-1].position.x, offset[1] + resources[-1].position.y))
-                for offset in offsets
-            )
-            # filter out points that are too near
+            # Possible expansion points
+            amount = len(resources)
+            # Calculate center, round and add 0.5 because expansion location will have (x.5, y.5)
+            # coordinates because bases have size 5.
+            center_x = int(sum(resource.position.x for resource in resources) / amount) + 0.5
+            center_y = int(sum(resource.position.y for resource in resources) / amount) + 0.5
+            possible_points = (Point2((offset[0] + center_x, offset[1] + center_y)) for offset in offsets)
+            # Filter out points that are too near
             possible_points = (
                 point
                 for point in possible_points
-                if all(
-                    point._distance_squared(resource.position) >= (49 if resource in geysers else 36)
-                    for resource in resources
-                )
+                # Check if point can be built on
+                if self._game_info.placement_grid[point.rounded] == 1
+                # Check if all resources have enough space to point
+                and all(point.distance_to(resource) > (7 if resource in geysers else 6) for resource in resources)
             )
-            # choose best fitting point
-            # TODO can we improve this by calculating the distance only one time?
-            result = min(
-                possible_points,
-                key=lambda point: sum(point._distance_squared(resource.position) for resource in resources),
-            )
+            # Choose best fitting point
+            result = min(possible_points, key=lambda point: sum(point.distance_to(resource) for resource in resources))
             centers[result] = resources
-        """ Returns dict with the correct expansion position Point2 key, resources (mineral field, vespene geyser) as value """
         return centers
 
     def _correct_zerg_supply(self):
@@ -203,7 +267,7 @@ class BotAI:
             }
             building = start_townhall_type[self.race]
 
-        assert isinstance(building, UnitTypeId), f"{building} is no UnitTypeId"
+        assert isinstance(building, UnitTypeId)
 
         if not location:
             location = await self.get_next_expansion()
@@ -218,7 +282,7 @@ class BotAI:
         for el in self.expansion_locations:
 
             def is_near_to_expansion(t):
-                return t.position._distance_squared(el) < self.EXPANSION_GAP_THRESHOLD ** 2
+                return t.distance_to(el) < self.EXPANSION_GAP_THRESHOLD
 
             if any(map(is_near_to_expansion, self.townhalls)):
                 # already taken
@@ -235,81 +299,122 @@ class BotAI:
 
         return closest
 
-    async def distribute_workers(self):
+    async def distribute_workers(self, resource_ratio: float = 2):
         """
         Distributes workers across all the bases taken.
+        Keyword `resource_ratio` takes a float. If the current minerals to gas
+        ratio is bigger than `resource_ratio`, this function prefer filling geysers
+        first, if it is lower, it will prefer sending workers to minerals first.
+        This is only for workers that need to be moved anyways, it will NOT will
+        geysers on its own.
+
+        NOTE: This function is far from optimal, if you really want to have
+        refined worker control, you should write your own distribution function.
+        For example long distance mining control and moving workers if a base was killed
+        are not being handled.
+
         WARNING: This is quite slow when there are lots of workers or multiple bases.
         """
-
-        # TODO:
-        # OPTIMIZE: Assign idle workers smarter
-        # OPTIMIZE: Never use same worker mutltiple times
-        owned_expansions = self.owned_expansions
-        worker_pool = []
+        if not self.state.mineral_field or not self.workers or not self.townhalls.ready:
+            return
         actions = []
+        worker_pool = [worker for worker in self.workers.idle]
+        bases = self.townhalls.ready
+        geysers = self.geysers.ready
 
-        for idle_worker in self.workers.idle:
-            mf = self.state.mineral_field.closest_to(idle_worker)
-            actions.append(idle_worker.gather(mf))
+        # list of places that need more workers
+        deficit_mining_places = []
 
-        for location, townhall in owned_expansions.items():
-            workers = self.workers.closer_than(20, location)
-            actual = townhall.assigned_harvesters
-            ideal = townhall.ideal_harvesters
-            excess = actual - ideal
-            if actual > ideal:
-                worker_pool.extend(workers.random_group_of(min(excess, len(workers))))
+        for mining_place in bases | geysers:
+            difference = mining_place.surplus_harvesters
+            # perfect amount of workers, skip mining place
+            if not difference:
                 continue
-        for g in self.geysers:
-            workers = self.workers.closer_than(5, g)
-            actual = g.assigned_harvesters
-            ideal = g.ideal_harvesters
-            excess = actual - ideal
-            if actual > ideal:
-                worker_pool.extend(workers.random_group_of(min(excess, len(workers))))
-                continue
+            if mining_place.is_vespene_geyser:
+                # get all workers that target the gas extraction site
+                # or are on their way back from it
+                local_workers = self.workers.filter(
+                    lambda unit: unit.order_target == mining_place.tag
+                    or (unit.is_carrying_vespene and unit.order_target == bases.closest_to(mining_place).tag)
+                )
+            else:
+                # get tags of minerals around expansion
+                local_minerals_tags = {
+                    mineral.tag for mineral in self.state.mineral_field if mineral.distance_to(mining_place) <= 8
+                }
+                # get all target tags a worker can have
+                # tags of the minerals he could mine at that base
+                # get workers that work at that gather site
+                local_workers = self.workers.filter(
+                    lambda unit: unit.order_target in local_minerals_tags
+                    or (unit.is_carrying_minerals and unit.order_target == mining_place.tag)
+                )
+            # too many workers
+            if difference > 0:
+                for worker in local_workers[:difference]:
+                    worker_pool.append(worker)
+            # too few workers
+            # add mining place to deficit bases for every missing worker
+            else:
+                deficit_mining_places += [mining_place for _ in range(-difference)]
 
-        for g in self.geysers:
-            actual = g.assigned_harvesters
-            ideal = g.ideal_harvesters
-            deficit = ideal - actual
-
-            for _ in range(deficit):
-                if worker_pool:
-                    w = worker_pool.pop()
-                    if len(w.orders) == 1 and w.orders[0].ability.id is AbilityId.HARVEST_RETURN:
-                        actions.append(w.move(g))
-                        actions.append(w.return_resource(queue=True))
-                    else:
-                        actions.append(w.gather(g))
-
-        for location, townhall in owned_expansions.items():
-            actual = townhall.assigned_harvesters
-            ideal = townhall.ideal_harvesters
-
-            deficit = ideal - actual
-            for _ in range(deficit):
-                if worker_pool:
-                    w = worker_pool.pop()
-                    mf = self.state.mineral_field.closest_to(townhall)
-                    if len(w.orders) == 1 and w.orders[0].ability.id is AbilityId.HARVEST_RETURN:
-                        actions.append(w.move(townhall))
-                        actions.append(w.return_resource(queue=True))
-                        actions.append(w.gather(mf, queue=True))
-                    else:
-                        actions.append(w.gather(mf))
+        # prepare all minerals near a base if we have too many workers
+        # and need to send them to the closest patch
+        if len(worker_pool) > len(deficit_mining_places):
+            all_minerals_near_base = [
+                mineral
+                for mineral in self.state.mineral_field
+                if any(mineral.distance_to(base) <= 8 for base in self.townhalls.ready)
+            ]
+        # distribute every worker in the pool
+        for worker in worker_pool:
+            # as long as have workers and mining places
+            if deficit_mining_places:
+                # choose only mineral fields first if current mineral to gas ratio is less than target ratio
+                if self.vespene and self.minerals / self.vespene < resource_ratio:
+                    possible_mining_places = [place for place in deficit_mining_places if not place.vespene_contents]
+                # else prefer gas
+                else:
+                    possible_mining_places = [place for place in deficit_mining_places if place.vespene_contents]
+                # if preferred type is not available any more, get all other places
+                if not possible_mining_places:
+                    possible_mining_places = deficit_mining_places
+                # find closest mining place
+                current_place = min(deficit_mining_places, key=lambda place: place.distance_to(worker))
+                # remove it from the list
+                deficit_mining_places.remove(current_place)
+                # if current place is a gas extraction site, go there
+                if current_place.vespene_contents:
+                    actions.append(worker.gather(current_place))
+                # if current place is a gas extraction site,
+                # go to the mineral field that is near and has the most minerals left
+                else:
+                    local_minerals = [
+                        mineral for mineral in self.state.mineral_field if mineral.distance_to(current_place) <= 8
+                    ]
+                    target_mineral = max(local_minerals, key=lambda mineral: mineral.mineral_contents)
+                    actions.append(worker.gather(target_mineral))
+            # more workers to distribute than free mining spots
+            # send to closest if worker is doing nothing
+            elif worker.is_idle and all_minerals_near_base:
+                target_mineral = min(all_minerals_near_base, key=lambda mineral: mineral.distance_to(worker))
+                actions.append(worker.gather(target_mineral))
+            else:
+                # there are no deficit mining places and worker is not idle
+                # so dont move him
+                pass
 
         await self.do_actions(actions)
 
     @property
-    def owned_expansions(self):
+    def owned_expansions(self) -> Dict[Point2, Unit]:
         """List of expansions owned by the player."""
 
         owned = {}
         for el in self.expansion_locations:
 
             def is_near_to_expansion(t):
-                return t.position._distance_squared(el) < self.EXPANSION_GAP_THRESHOLD ** 2
+                return t.distance_to(el) < self.EXPANSION_GAP_THRESHOLD
 
             th = next((x for x in self.townhalls if is_near_to_expansion(x)), None)
             if th:
@@ -349,8 +454,8 @@ class BotAI:
     ) -> bool:
         """Tests if a unit has an ability available and enough energy to cast it.
         See data_pb2.py (line 161) for the numbers 1-5 to make sense"""
-        assert isinstance(unit, Unit), f"{unit} is no Unit object"
-        assert isinstance(ability_id, AbilityId), f"{ability_id} is no AbilityId"
+        assert isinstance(unit, Unit)
+        assert isinstance(ability_id, AbilityId)
         assert isinstance(target, (type(None), Unit, Point2, Point3))
         # check if unit has enough energy to cast or if ability is on cooldown
         if cached_abilities_of_unit:
@@ -368,26 +473,25 @@ class BotAI:
                 ability_target == 1
                 or ability_target == Target.PointOrNone.value
                 and isinstance(target, (Point2, Point3))
-                and unit.position._distance_squared(target.position) <= cast_range ** 2
+                and unit.distance_to(target) <= cast_range
             ):  # cant replace 1 with "Target.None.value" because ".None" doesnt seem to be a valid enum name
                 return True
             # Check if able to use ability on a unit
             elif (
                 ability_target in {Target.Unit.value, Target.PointOrUnit.value}
                 and isinstance(target, Unit)
-                and unit.position._distance_squared(target.position) <= cast_range ** 2
+                and unit.distance_to(target) <= cast_range
             ):
                 return True
             # Check if able to use ability on a position
             elif (
                 ability_target in {Target.Point.value, Target.PointOrUnit.value}
                 and isinstance(target, (Point2, Point3))
-                and unit.position._distance_squared(target) <= cast_range ** 2
+                and unit.distance_to(target) <= cast_range
             ):
                 return True
         return False
 
-  
     def select_build_worker(self, pos: Union[Unit, Point2, Point3], force: bool = False) -> Optional[Unit]:
         """Select a worker to build a building with."""
         workers = (
@@ -427,7 +531,7 @@ class BotAI:
         """Finds a placement location for building."""
 
         assert isinstance(building, (AbilityId, UnitTypeId))
-        assert isinstance(near, Point2), f"{near} is no Point2 object"
+        assert isinstance(near, Point2)
 
         if isinstance(building, UnitTypeId):
             building = self._game_data.units[building.value].creation_ability
@@ -458,7 +562,7 @@ class BotAI:
             if random_alternative:
                 return random.choice(possible)
             else:
-                return min(possible, key=lambda p: p._distance_squared(near))
+                return min(possible, key=lambda p: p.distance_to_point2(near))
         return None
 
     def already_pending_upgrade(self, upgrade_type: UpgradeId) -> Union[int, float]:
@@ -468,7 +572,7 @@ class BotAI:
         0 < x < 1: researching
         1: finished
         """
-        assert isinstance(upgrade_type, UpgradeId), f"{upgrade_type} is no UpgradeId"
+        assert isinstance(upgrade_type, UpgradeId)
         if upgrade_type in self.state.upgrades:
             return 1
         level = None
@@ -527,27 +631,25 @@ class BotAI:
         (Interceptors) or Oracles (Stasis Ward)) are also included.
         """
 
+        # TODO / FIXME: SCV building a structure might be counted as two units
+
         if isinstance(unit_type, UpgradeId):
             return self.already_pending_upgrade(unit_type)
 
         ability = self._game_data.units[unit_type.value].creation_ability
 
-        if all_units:
-            return self._abilities_all_units[ability]
-        else:
-            return self._abilities_workers_and_eggs[ability]
+        amount = len(self.units(unit_type).not_ready)
 
-    async def build(
-        self,
-        building: UnitTypeId,
-        near: Union[Point2, Point3],
-        max_distance: int = 20,
-        unit: Optional[Unit] = None,
-        random_alternative: bool = True,
-        placement_step: int = 2,
-    ):
-        """ Not recommended as this function uses 'self.do' (reduces performance).
-        Also if the position is not placeable, this function tries to find a nearby position to place the structure. Then uses 'self.do' to give the worker the order to start the construction. """
+        if all_units:
+            amount += sum([o.ability == ability for u in self.units for o in u.orders])
+        else:
+            amount += sum([o.ability == ability for w in self.workers for o in w.orders])
+            amount += sum([egg.orders[0].ability == ability for egg in self.units(UnitTypeId.EGG)])
+
+        return amount
+
+    async def build(self, building: UnitTypeId, near: Union[Point2, Point3], max_distance: int=20, unit: Optional[Unit]=None, random_alternative: bool=True, placement_step: int=2):
+        """Build a building."""
 
         if isinstance(near, Unit):
             near = near.position.to2
@@ -556,7 +658,7 @@ class BotAI:
         else:
             return
 
-        p = await self.find_placement(building, near, max_distance, random_alternative, placement_step)
+        p = await self.find_placement(building, near.rounded, max_distance, random_alternative, placement_step)
         if p is None:
             return ActionResult.CantFindPlacementLocation
 
@@ -566,11 +668,6 @@ class BotAI:
         return await self.do(unit.build(building, p))
 
     async def do(self, action):
-        """ Not recommended. Use self.do_actions once per iteration instead to reduce lag:
-        self.actions = []
-        cc = self.units(COMMANDCENTER).random
-        self.actions.append(cc.train(SCV))
-        await self.do_action(self.actions) """
         if not self.can_afford(action):
             logger.warning(f"Cannot afford action {action}")
             return ActionResult.Error
@@ -608,63 +705,71 @@ class BotAI:
             # action: UnitCommand
             # current_action: UnitOrder
             current_action = action.unit.orders[0]
-            # different action
             if current_action.ability.id != action.ability:
+                # different action, return true
                 return True
-            if (
-                isinstance(current_action.target, int)
-                and isinstance(action.target, Unit)
-                and current_action.target == action.target.tag
-            ):
-                # remove action if same target unit
-                return False
-            elif (
-                isinstance(action.target, Point2)
-                and isinstance(current_action.target, common_pb.Point)
-                and (action.target.x, action.target.y) == (current_action.target.x, current_action.target.y)
-            ):
-                # remove action if same target position
-                return False
+            try:
+                if current_action.target == action.target.tag:
+                    # same action, remove action if same target unit
+                    return False
+            except AttributeError:
+                pass
+            try:
+                if action.target.x == current_action.target.x and action.target.y == current_action.target.y:
+                    # same action, remove action if same target position
+                    return False
+            except AttributeError:
+                pass
+            return True
         return True
 
     async def chat_send(self, message: str):
-        """Send a chat message."""
+        """ Send a chat message. """
         assert isinstance(message, str), f"{message} is no string"
         await self._client.chat_send(message, False)
 
     # For the functions below, make sure you are inside the boundries of the map size.
     def get_terrain_height(self, pos: Union[Point2, Point3, Unit]) -> int:
-        """ Returns terrain height at a position. Caution: terrain height is not anywhere near a unit's z-coordinate. """
+        """ Returns terrain height at a position.
+        Caution: terrain height is different from a unit's z-coordinate.
+        """
         assert isinstance(pos, (Point2, Point3, Unit)), f"pos is not of type Point2, Point3 or Unit"
         pos = pos.position.to2.rounded
-        return self._game_info.terrain_height[pos]
+        return self._game_info.terrain_height[pos] # returns int
+
+    def get_terrain_z_height(self, pos: Union[Point2, Point3, Unit]) -> int:
+        """ Returns terrain z-height at a position. """
+        assert isinstance(pos, (Point2, Point3, Unit)), f"pos is not of type Point2, Point3 or Unit"
+        pos = pos.position.to2.rounded
+        return -16 + 32 * self._game_info.terrain_height[pos] / 255
 
     def in_placement_grid(self, pos: Union[Point2, Point3, Unit]) -> bool:
-        """ Returns True if you can place something at a position. Remember, buildings usually use 2x2, 3x3 or 5x5 of these grid points.
+        """ Returns True if you can place something at a position.
+        Remember, buildings usually use 2x2, 3x3 or 5x5 of these grid points.
         Caution: some x and y offset might be required, see ramp code:
         https://github.com/Dentosal/python-sc2/blob/master/sc2/game_info.py#L17-L18 """
-        assert isinstance(pos, (Point2, Point3, Unit)), f"pos is not of type Point2, Point3 or Unit"
+        assert isinstance(pos, (Point2, Point3, Unit))
         pos = pos.position.to2.rounded
-        return self._game_info.placement_grid[pos] != 0
+        return self._game_info.placement_grid[pos] == 1
 
     def in_pathing_grid(self, pos: Union[Point2, Point3, Unit]) -> bool:
         """ Returns True if a unit can pass through a grid point. """
-        assert isinstance(pos, (Point2, Point3, Unit)), f"pos is not of type Point2, Point3 or Unit"
+        assert isinstance(pos, (Point2, Point3, Unit))
         pos = pos.position.to2.rounded
-        return self._game_info.pathing_grid[pos] == 0
+        return self._game_info.pathing_grid[pos] == 1
 
     def is_visible(self, pos: Union[Point2, Point3, Unit]) -> bool:
         """ Returns True if you have vision on a grid point. """
         # more info: https://github.com/Blizzard/s2client-proto/blob/9906df71d6909511907d8419b33acc1a3bd51ec0/s2clientprotocol/spatial.proto#L19
-        assert isinstance(pos, (Point2, Point3, Unit)), f"pos is not of type Point2, Point3 or Unit"
+        assert isinstance(pos, (Point2, Point3, Unit))
         pos = pos.position.to2.rounded
         return self.state.visibility[pos] == 2
 
     def has_creep(self, pos: Union[Point2, Point3, Unit]) -> bool:
         """ Returns True if there is creep on the grid point. """
-        assert isinstance(pos, (Point2, Point3, Unit)), f"pos is not of type Point2, Point3 or Unit"
+        assert isinstance(pos, (Point2, Point3, Unit))
         pos = pos.position.to2.rounded
-        return self.state.creep[pos] != 0
+        return self.state.creep[pos] == 1
 
     def _prepare_start(self, client, player_id, game_info, game_data):
         """Ran until game start to set game and player data."""
@@ -675,9 +780,6 @@ class BotAI:
         self.player_id: int = player_id
         self.race: Race = Race(self._game_info.player_races[self.player_id])
 
-        if len(self._game_info.player_races) == 2:
-            self.enemy_race: Race = Race(self._game_info.player_races[3 - self.player_id])
-
         self._units_previous_map: dict = dict()
         self._previous_upgrades: Set[UpgradeId] = set()
         self.units: Units = Units([])
@@ -686,11 +788,15 @@ class BotAI:
         """First step extra preparations. Must not be called before _prepare_step."""
         if self.townhalls:
             self._game_info.player_start_location = self.townhalls.first.position
-        self._game_info.map_ramps = self._game_info._find_ramps()
+        self._game_info.map_ramps, self._game_info.vision_blockers = self._game_info._find_ramps_and_vision_blockers()
 
-    def _prepare_step(self, state):
-        """Set attributes from new state before on_step."""
+    def _prepare_step(self, state, proto_game_info):
+        # Set attributes from new state before on_step."""
         self.state: GameState = state  # See game_state.py
+        # update pathing grid
+        self._game_info.pathing_grid: PixelMap = PixelMap(
+            proto_game_info.game_info.start_raw.pathing_grid, in_bits=True, mirrored=False
+        )
         # Required for events
         self._units_previous_map: Dict = {unit.tag: unit for unit in self.units}
         self.units: Units = state.own_units
@@ -723,7 +829,6 @@ class BotAI:
         - on_unit_created
         - on_unit_destroyed
         - on_building_construction_complete
-        - on_upgrade_complete
         """
         await self._issue_unit_dead_events()
         await self._issue_unit_added_events()
@@ -735,12 +840,12 @@ class BotAI:
             self._previous_upgrades = self.state.upgrades
 
     async def _issue_unit_added_events(self):
-        for unit in self.units:
+        for unit in self.units.not_structure:
             if unit.tag not in self._units_previous_map:
-                if unit.is_structure:
-                    await self.on_building_construction_started(unit)
-                else:
-                    await self.on_unit_created(unit)
+                await self.on_unit_created(unit)
+        for unit in self.units.structure:
+            if unit.tag not in self._units_previous_map:
+                await self.on_building_construction_started(unit)
 
     async def _issue_building_complete_event(self, unit):
         if unit.build_progress < 1:

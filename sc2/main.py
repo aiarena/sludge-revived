@@ -3,6 +3,7 @@ import logging
 import time
 
 import async_timeout
+from s2clientprotocol import sc2api_pb2 as sc_pb
 
 from .client import Client
 from .data import CreateGameError, Result
@@ -24,7 +25,7 @@ class SlidingTimeWindow:
         self.window = []
 
     def push(self, value: float):
-        self.window = (self.window + [value])[-self.window_size :]
+        self.window = (self.window + [value])[-self.window_size:]
 
     def clear(self):
         self.window = []
@@ -54,7 +55,6 @@ async def _play_game_human(client, player_id, realtime, game_time_limit):
 
         if not realtime:
             await client.step()
-
 
 async def _play_game_ai(client, player_id, ai, realtime, step_time_limit, game_time_limit):
     if realtime:
@@ -91,6 +91,7 @@ async def _play_game_ai(client, player_id, ai, realtime, step_time_limit, game_t
         time_window = SlidingTimeWindow(int(step_time_limit.get("window_size", 1)))
         time_limit = float(step_time_limit.get("time_limit", None))
 
+
     game_data = await client.get_game_data()
     # Used in PassengerUnit, Unit and Units
     UnitGameData._game_data = game_data
@@ -100,8 +101,13 @@ async def _play_game_ai(client, player_id, ai, realtime, step_time_limit, game_t
     # This game_data will become self._game_data in botAI
     ai._prepare_start(client, player_id, game_info, game_data)
     state = await client.observation()
+    # check game result every time we get the observation
+    if client._game_result:
+        ai.on_end(client._game_result[player_id])
+        return client._game_result[player_id]
     gs = GameState(state.observation)
-    ai._prepare_step(gs)
+    proto_game_info = await client._execute(game_info=sc_pb.RequestGameInfo())
+    ai._prepare_step(gs, proto_game_info)
     ai._prepare_first_step()
     try:
         ai.on_start()
@@ -114,21 +120,20 @@ async def _play_game_ai(client, player_id, ai, realtime, step_time_limit, game_t
 
     iteration = 0
     while True:
-        if client._game_result:
-            ai.on_end(client._game_result[player_id])
-            return client._game_result[player_id]
-
         if iteration != 0:
             state = await client.observation()
+            # check game result every time we get the observation
+            if client._game_result:
+                ai.on_end(client._game_result[player_id])
+                return client._game_result[player_id]
             gs = GameState(state.observation)
-            #logger.debug(f"Score: {gs.score.summary}")
-            logger.debug(f"Score: {state.observation.observation.score.score}")
+            logger.debug(f"Score: {gs.score.summary}")
 
             if game_time_limit and (gs.game_loop * 0.725 * (1 / 16)) > game_time_limit:
                 ai.on_end(Result.Tie)
                 return Result.Tie
-
-            ai._prepare_step(gs)
+            proto_game_info = await client._execute(game_info=sc_pb.RequestGameInfo())
+            ai._prepare_step(gs, proto_game_info)
 
         logger.debug(f"Running AI step, it={iteration} {gs.game_loop * 0.725 * (1 / 16):.2f}s")
 
@@ -140,7 +145,7 @@ async def _play_game_ai(client, player_id, ai, realtime, step_time_limit, game_t
                 if time_penalty_cooldown > 0:
                     time_penalty_cooldown -= 1
                     logger.warning(f"Running AI step: penalty cooldown: {time_penalty_cooldown}")
-                    iteration -= 1  # Do not increment the iteration on this round
+                    iteration -= 1 # Do not increment the iteration on this round
                 elif time_limit is None:
                     await ai.on_step(iteration)
                 else:
@@ -162,9 +167,9 @@ async def _play_game_ai(client, player_id, ai, realtime, step_time_limit, game_t
                         except asyncio.TimeoutError:
                             step_time = time.monotonic() - step_start
                             logger.warning(
-                                f"Running AI step: out of budget; "
-                                + f"budget={budget:.2f}, steptime={step_time:.2f}, "
-                                + f"window={time_window.available_fmt}"
+                                f"Running AI step: out of budget; " +
+                                f"budget={budget:.2f}, steptime={step_time:.2f}, " +
+                                f"window={time_window.available_fmt}"
                             )
                             out_of_budget = True
                         step_time = time.monotonic() - step_start
@@ -188,9 +193,8 @@ async def _play_game_ai(client, player_id, ai, realtime, step_time_limit, game_t
                 ai.on_end(result)
                 return result
             # NOTE: this message is caught by pytest suite
-            logger.exception(f"AI step threw an error")  # DO NOT EDIT!
-            logger.error(f"Error: {e}")
-            logger.error(f"Resigning due to previous error")
+            logger.exception(f"AI step threw an error") # DO NOT EDIT!
+            logger.error(f"resigning due to previous error")
             ai.on_end(Result.Defeat)
             return Result.Defeat
 
@@ -205,10 +209,7 @@ async def _play_game_ai(client, player_id, ai, realtime, step_time_limit, game_t
 
         iteration += 1
 
-
-async def _play_game(
-    player, client, realtime, portconfig, step_time_limit=None, game_time_limit=None, rgb_render_config=None
-):
+async def _play_game(player, client, realtime, portconfig, step_time_limit=None, game_time_limit=None, rgb_render_config=None):
     assert isinstance(realtime, bool), repr(realtime)
 
     player_id = await client.join_game(
@@ -225,7 +226,6 @@ async def _play_game(
 
     return result
 
-
 async def _setup_host_game(server, map_settings, players, realtime, random_seed=None):
     r = await server.create_game(map_settings, players, realtime, random_seed)
     if r.create_game.HasField("error"):
@@ -238,19 +238,9 @@ async def _setup_host_game(server, map_settings, players, realtime, random_seed=
     return Client(server._ws)
 
 
-async def _host_game(
-    map_settings,
-    players,
-    realtime,
-    portconfig=None,
-    save_replay_as=None,
-    step_time_limit=None,
-    game_time_limit=None,
-    rgb_render_config=None,
-    random_seed=None,
-):
-
-    assert players, "Can't create a game without players"
+async def _host_game(map_settings, players, realtime, portconfig=None, save_replay_as=None, step_time_limit=None,
+                     game_time_limit=None, rgb_render_config=None, random_seed=None):
+    assert len(players) > 0, "Can't create a game without players"
 
     assert any(isinstance(p, (Human, Bot)) for p in players)
 
@@ -260,9 +250,7 @@ async def _host_game(
         client = await _setup_host_game(server, map_settings, players, realtime, random_seed)
 
         try:
-            result = await _play_game(
-                players[0], client, realtime, portconfig, step_time_limit, game_time_limit, rgb_render_config
-            )
+            result = await _play_game(players[0], client, realtime, portconfig, step_time_limit, game_time_limit, rgb_render_config)
             if save_replay_as is not None:
                 await client.save_replay(save_replay_as)
             await client.leave()
@@ -273,10 +261,7 @@ async def _host_game(
 
         return result
 
-
-async def _host_game_aiter(
-    map_settings, players, realtime, portconfig=None, save_replay_as=None, step_time_limit=None, game_time_limit=None
-):
+async def _host_game_aiter(map_settings, players, realtime, portconfig=None, save_replay_as=None, step_time_limit=None, game_time_limit=None):
     assert players, "Can't create a game without players"
 
     assert any(isinstance(p, (Human, Bot)) for p in players)
@@ -300,7 +285,6 @@ async def _host_game_aiter(
             new_players = yield result
             if new_players is not None:
                 players = new_players
-
 
 def _host_game_iter(*args, **kwargs):
     game = _host_game_aiter(*args, **kwargs)
@@ -327,19 +311,18 @@ async def _join_game(players, realtime, portconfig, save_replay_as=None, step_ti
 
         return result
 
-
 def run_game(map_settings, players, **kwargs):
     if sum(isinstance(p, (Human, Bot)) for p in players) > 1:
         host_only_args = ["save_replay_as", "rgb_render_config", "random_seed"]
         join_kwargs = {k: v for k, v in kwargs.items() if k not in host_only_args}
 
         portconfig = Portconfig()
-        result = asyncio.get_event_loop().run_until_complete(
-            asyncio.gather(
-                _host_game(map_settings, players, **kwargs, portconfig=portconfig),
-                _join_game(players, **join_kwargs, portconfig=portconfig),
-            )
-        )
+        result = asyncio.get_event_loop().run_until_complete(asyncio.gather(
+            _host_game(map_settings, players, **kwargs, portconfig=portconfig),
+            _join_game(players, **join_kwargs, portconfig=portconfig)
+        ))
     else:
-        result = asyncio.get_event_loop().run_until_complete(_host_game(map_settings, players, **kwargs))
+        result = asyncio.get_event_loop().run_until_complete(
+            _host_game(map_settings, players, **kwargs)
+        )
     return result
