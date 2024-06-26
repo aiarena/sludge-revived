@@ -1,0 +1,24 @@
+from enum import Enum
+
+class ScoutingInformation(Enum):
+    THREAT_LEVEL_0 = 0
+    THREAT_LEVEL_1 = 1
+    THREAT_LEVEL_2 = 2
+    THREAT_LEVEL_3 = 3
+    LARGE_THREAT_NEARBY = 4
+    ENEMY_MOVED_OUT = 5
+
+    ENEMY_ONE_BASE = 7
+    ENEMY_TWO_BASE = 8
+    ENEMY_THREE_BASE = 6
+    ENEMY_FOUR_BASE = 9
+
+    HEAVY_DEFENSE = 10
+
+    OPPONENT_HAS_POOL = 100
+
+    TERRAN_1BASE_BIO = 200
+    STARPORT_TECHLAB = 201
+
+    THREAT_CLOAK = 300
+    STARGATE = 301
