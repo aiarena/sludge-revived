@@ -104,7 +104,7 @@ class EnemyPrioritizer:
         else:
             # this group contains only structures... groups that contain structures can only contain one
             building_type = group.units.first.type_id
-            if building_type == UnitTypeId.PHOTONCANNON and group.location.distance_to_closest(self.state.own_townhalls) < 20:
+            if building_type == UnitTypeId.PHOTONCANNON and self.state.own_townhalls and group.location.distance_to_closest(self.state.own_townhalls) < 20:
                 # proxy cannon
                 building_priority = 1
             else:
